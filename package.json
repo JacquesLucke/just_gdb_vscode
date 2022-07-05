@@ -1,6 +1,6 @@
 {
-	"name": "direct-gdb",
-	"displayName": "Direct GDB",
+	"name": "just-gdb",
+	"displayName": "Just GDB",
 	"description": "Fast debugging with GDB by avoiding the debug adapter protocol.",
 	"version": "0.0.1",
 	"engines": {
@@ -10,27 +10,31 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:direct-gdb.startGDB",
-		"onCommand:direct-gdb.playground"
+		"onCommand:just-gdb.startGDB",
+		"onCommand:just-gdb.playground"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "direct-gdb.startGDB",
-				"title": "Start GDB"
+				"command": "just-gdb.startGDB",
+				"title": "Start GDB",
+				"category": "Just GDB"
 			},
 			{
-				"command": "direct-gdb.run",
-				"title": "Run Program"
+				"command": "just-gdb.run",
+				"title": "Run Program",
+				"category": "Just GDB"
 			},
 			{
-				"command": "direct-gdb.pause",
-				"title": "Pause"
+				"command": "just-gdb.pause",
+				"title": "Pause",
+				"category": "Just GDB"
 			},
 			{
-				"command": "direct-gdb.playground",
-				"title": "Playground"
+				"command": "just-gdb.playground",
+				"title": "Playground",
+				"category": "Just GDB"
 			}
 		]
 	},

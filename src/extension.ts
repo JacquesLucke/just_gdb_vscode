@@ -7,10 +7,10 @@ let gdb_process: child_process.ChildProcessWithoutNullStreams | null = null;
 export function activate(context: vscode.ExtensionContext) {
 
 	const commands: [string, any][] = [
-		['direct-gdb.startGDB', COMMAND_startGDB],
-		['direct-gdb.run', COMMAND_run],
-		['direct-gdb.pause', COMMAND_pause],
-		['direct-gdb.playground', COMMAND_playground],
+		['just-gdb.startGDB', COMMAND_startGDB],
+		['just-gdb.run', COMMAND_run],
+		['just-gdb.pause', COMMAND_pause],
+		['just-gdb.playground', COMMAND_playground],
 	];
 
 	for (const item of commands) {
