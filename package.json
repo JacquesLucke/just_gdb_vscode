@@ -1,5 +1,5 @@
 {
-  "name": "direct-gdb",
+	"name": "direct-gdb",
 	"displayName": "Direct GDB",
 	"description": "Fast debugging with GDB by avoiding the debug adapter protocol.",
 	"version": "0.0.1",
@@ -10,14 +10,27 @@
 		"Other"
 	],
 	"activationEvents": [
-        "onCommand:direct-gdb.helloWorld"
+		"onCommand:direct-gdb.startGDB",
+		"onCommand:direct-gdb.playground"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "direct-gdb.helloWorld",
-				"title": "Hello World"
+				"command": "direct-gdb.startGDB",
+				"title": "Start GDB"
+			},
+			{
+				"command": "direct-gdb.run",
+				"title": "Run Program"
+			},
+			{
+				"command": "direct-gdb.pause",
+				"title": "Pause"
+			},
+			{
+				"command": "direct-gdb.playground",
+				"title": "Playground"
 			}
 		]
 	},
