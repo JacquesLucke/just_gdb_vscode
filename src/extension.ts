@@ -16,6 +16,8 @@ export function activate(context: vscode.ExtensionContext) {
 	for (const item of commands) {
 		context.subscriptions.push(vscode.commands.registerCommand(item[0], item[1]));
 	}
+
+	vscode.window.createTreeView("gdbThreads", { treeDataProvider: new ThreadsViewProvider() });
 }
 
 export function deactivate() { }
@@ -147,3 +149,26 @@ function COMMAND_playground() {
 function on_gdb_close(status_code: number) {
 	gdb_process = null;
 }
+
+
+class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
+	getTreeItem(element: ThreadsViewItem) {
+		return element;
+	}
+
+	getChildren(element?: ThreadsViewItem): vscode.ProviderResult<ThreadsViewItem[]> {
+		if (element) {
+			return [];
+		}
+		else {
+			return [new ThreadsViewItem(), new ThreadsViewItem()];
+		}
+
+	}
+};
+
+class ThreadsViewItem extends vscode.TreeItem {
+	constructor() {
+		super("Hello World");
+	}
+};

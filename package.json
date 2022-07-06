@@ -36,7 +36,15 @@
 				"title": "Playground",
 				"category": "Just GDB"
 			}
-		]
+		],
+		"views": {
+			"debug": [
+				{
+					"id": "gdbThreads",
+					"name": "GDB Threads"
+				}
+			]
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
