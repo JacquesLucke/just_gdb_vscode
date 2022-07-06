@@ -201,6 +201,7 @@ class DebugSession {
 
 
 let debugSession: DebugSession | null = null;
+let threadsViewProvider: ThreadsViewProvider | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -213,6 +214,7 @@ export function activate(context: vscode.ExtensionContext) {
 		['just-gdb.stepInto', COMMAND_stepInto],
 		['just-gdb.stepOut', COMMAND_stepOut],
 		['just-gdb.continue', COMMAND_continue],
+		['just-gdb.loadBacktrace', COMMAND_loadBacktrace],
 	];
 
 	for (const item of commands) {
@@ -260,7 +262,8 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	})
 
-	// vscode.window.createTreeView("gdbThreads", { treeDataProvider: new ThreadsViewProvider() });
+	threadsViewProvider = new ThreadsViewProvider();
+	vscode.window.createTreeView("gdbThreads", { treeDataProvider: threadsViewProvider });
 }
 
 export function deactivate() { }
@@ -275,7 +278,7 @@ function COMMAND_startGDB() {
 		return;
 	}
 
-	debugSession = new DebugSession("gdb", ["/home/jacques/blender/build_debug/bin/blender"], "GDB");
+	debugSession = new DebugSession("gdb", ["/home/jacques/Documents/test_c_debug/a.out"], "GDB");
 	debugSession.terminal.show();
 }
 
@@ -306,6 +309,13 @@ function COMMAND_continue() {
 	debugSession?.sendCommandToTerminalAndGDB("c");
 }
 
+let loadBacktraceCounter = 1;
+
+function COMMAND_loadBacktrace() {
+	loadBacktraceCounter++;
+	threadsViewProvider?.refresh();
+}
+
 // let currentLine = 1;
 
 // const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
@@ -334,24 +344,45 @@ function COMMAND_playground() {
 }
 
 
-// class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
-// 	getTreeItem(element: ThreadsViewItem) {
-// 		return element;
-// 	}
+class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
+	private _onDidChangeTreeData = new vscode.EventEmitter<ThreadsViewItem | undefined | null | void>();
+	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-// 	getChildren(element?: ThreadsViewItem): vscode.ProviderResult<ThreadsViewItem[]> {
-// 		if (element) {
-// 			return [];
-// 		}
-// 		else {
-// 			return [new ThreadsViewItem(), new ThreadsViewItem()];
-// 		}
+	refresh() {
+		this._onDidChangeTreeData.fire();
+	}
 
-// 	}
-// };
+	getTreeItem(element: ThreadsViewItem) {
+		return element;
+	}
 
-// class ThreadsViewItem extends vscode.TreeItem {
-// 	constructor() {
-// 		super("Hello World");
-// 	}
-// };
+	getChildren(element?: ThreadsViewItem): vscode.ProviderResult<ThreadsViewItem[]> {
+		if (element) {
+			return [];
+		}
+		else {
+			let items = [];
+			for (let i = 0; i < loadBacktraceCounter; i++) {
+				items.push(new LoadThreadsItem());
+			}
+			return items;
+		}
+
+	}
+};
+
+class ThreadsViewItem extends vscode.TreeItem {
+	constructor(label: string) {
+		super(label);
+	}
+};
+
+class LoadThreadsItem extends ThreadsViewItem {
+	constructor() {
+		super("Load");
+		this.command = {
+			title: "Load",
+			command: "just-gdb.loadBacktrace",
+		};
+	}
+};

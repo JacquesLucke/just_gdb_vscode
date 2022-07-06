@@ -55,6 +55,11 @@
 				"command": "just-gdb.playground",
 				"title": "Playground",
 				"category": "Just GDB"
+			},
+			{
+				"command": "just-gdb.loadBacktrace",
+				"title": "Load Backtrace",
+				"category": "Just GDB"
 			}
 		],
 		"views": {
