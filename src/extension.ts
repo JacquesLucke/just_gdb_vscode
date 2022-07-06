@@ -42,6 +42,10 @@ class DebugSession {
 			receive(type, data) {
 				if (type == 'continue') {
 					vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
+					if (threadsViewProvider) {
+						threadsViewProvider.stackFrames = [];
+						threadsViewProvider.refresh();
+					}
 				}
 				return true;
 			},
@@ -309,11 +313,20 @@ function COMMAND_continue() {
 	debugSession?.sendCommandToTerminalAndGDB("c");
 }
 
-let loadBacktraceCounter = 1;
-
 function COMMAND_loadBacktrace() {
-	loadBacktraceCounter++;
-	threadsViewProvider?.refresh();
+	debugSession?.packetListeners.push({
+		receive(type, data) {
+			if (type === 'backtrace') {
+				if (threadsViewProvider !== null) {
+					threadsViewProvider.stackFrames = data['frames'];
+					threadsViewProvider.refresh();
+					return false;
+				}
+			}
+			return true;
+		}
+	});
+	debugSession?.sendCommandToTerminalAndGDB("python request_backtrace()");
 }
 
 // let currentLine = 1;
@@ -348,6 +361,8 @@ class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
 	private _onDidChangeTreeData = new vscode.EventEmitter<ThreadsViewItem | undefined | null | void>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+	stackFrames: string[] = [];
+
 	refresh() {
 		this._onDidChangeTreeData.fire();
 	}
@@ -362,8 +377,9 @@ class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
 		}
 		else {
 			let items = [];
-			for (let i = 0; i < loadBacktraceCounter; i++) {
-				items.push(new LoadThreadsItem());
+			items.push(new LoadBacktraceItem());
+			for (let name of this.stackFrames) {
+				items.push(new StackFrameItem(name));
 			}
 			return items;
 		}
@@ -372,17 +388,20 @@ class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
 };
 
 class ThreadsViewItem extends vscode.TreeItem {
-	constructor(label: string) {
-		super(label);
-	}
 };
 
-class LoadThreadsItem extends ThreadsViewItem {
+class LoadBacktraceItem extends ThreadsViewItem {
 	constructor() {
 		super("Load");
 		this.command = {
 			title: "Load",
 			command: "just-gdb.loadBacktrace",
 		};
+	}
+};
+
+class StackFrameItem extends ThreadsViewItem {
+	constructor(label: string) {
+		super(label);
 	}
 };

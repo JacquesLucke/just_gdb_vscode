@@ -47,3 +47,14 @@ def request_hover_value(expression: str):
     "expression": expression,
     "value": value_str,
   })
+
+def request_backtrace():
+  frame = gdb.newest_frame()
+  frames = []
+  while frame is not None:
+    frames.append(str(frame))
+    frame = frame.older()
+  send_data_to_vscode({
+    "type": "backtrace",
+    "frames": frames,
+  })
