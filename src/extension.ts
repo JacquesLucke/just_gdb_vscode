@@ -32,6 +32,8 @@ class DebugSession {
 		this.gdbProcess.stdout?.on('data', this.onProcessStdout.bind(this));
 		this.gdbProcess.stderr?.on('data', this.onProcessStderr.bind(this));
 		this.gdbProcess.on('close', this.onProcessClose.bind(this));
+
+		this.sendCommandToTerminalAndGDB("source " + gdbExtensionPath);
 	}
 
 	private onTerminalClose() {
@@ -87,12 +89,18 @@ class DebugSession {
 		}
 	}
 
-	forwardTextToGDB(command: string) {
-		this.gdbProcess?.stdin?.write(command);
+	sendCommandToTerminalAndGDB(command: string) {
+		this.terminalWriteEmitter.fire(command + "\n\r");
+		this.forwardTextToGDB(command + "\n");
+	}
+
+	forwardTextToGDB(text: string) {
+		this.gdbProcess?.stdin?.write(text);
 	}
 
 	interrupt() {
 		this.gdbProcess?.kill('SIGINT');
+		this.sendCommandToTerminalAndGDB("python print_file_stack()")
 	}
 };
 
