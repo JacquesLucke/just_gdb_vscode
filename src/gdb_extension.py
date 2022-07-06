@@ -52,7 +52,7 @@ def request_backtrace():
   frame = gdb.newest_frame()
   frames = []
   while frame is not None:
-    frames.append(str(frame))
+    frames.append(str(frame.function()))
     frame = frame.older()
   send_data_to_vscode({
     "type": "backtrace",

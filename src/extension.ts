@@ -282,7 +282,7 @@ function COMMAND_startGDB() {
 		return;
 	}
 
-	debugSession = new DebugSession("gdb", ["/home/jacques/Documents/test_c_debug/a.out"], "GDB");
+	debugSession = new DebugSession("gdb", ["/home/jacques/blender/build_debug/bin/blender"], "GDB");
 	debugSession.terminal.show();
 }
 
