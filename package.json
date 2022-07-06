@@ -27,6 +27,21 @@
 				"category": "Just GDB"
 			},
 			{
+				"command": "just-gdb.stepOver",
+				"title": "Step Over",
+				"category": "Just GDB"
+			},
+			{
+				"command": "just-gdb.stepInto",
+				"title": "Step Into",
+				"category": "Just GDB"
+			},
+			{
+				"command": "just-gdb.stepOut",
+				"title": "Step Out",
+				"category": "Just GDB"
+			},
+			{
 				"command": "just-gdb.pause",
 				"title": "Pause",
 				"category": "Just GDB"

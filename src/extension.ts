@@ -142,6 +142,7 @@ class DebugSession {
 	private onProcessClose() {
 		debugSession = null;
 		this.gdbProcess?.kill();
+		this.terminalWriteEmitter.fire("\n\r\n\rGDB exited.\n\r");
 	}
 
 	private processOutputToTerminal(data: Buffer) {
@@ -181,6 +182,9 @@ export function activate(context: vscode.ExtensionContext) {
 		['just-gdb.run', COMMAND_run],
 		['just-gdb.pause', COMMAND_pause],
 		['just-gdb.playground', COMMAND_playground],
+		['just-gdb.stepOver', COMMAND_stepOver],
+		['just-gdb.stepInto', COMMAND_stepInto],
+		['just-gdb.stepOut', COMMAND_stepOut],
 	];
 
 	for (const item of commands) {
@@ -214,10 +218,19 @@ function COMMAND_run() {
 }
 
 function COMMAND_pause() {
-	if (debugSession === null) {
-		return;
-	}
-	debugSession.interrupt();
+	debugSession?.interrupt();
+}
+
+function COMMAND_stepOver() {
+	debugSession?.sendCommandToTerminalAndGDB("n");
+}
+
+function COMMAND_stepInto() {
+	debugSession?.sendCommandToTerminalAndGDB("s");
+}
+
+function COMMAND_stepOut() {
+	debugSession?.sendCommandToTerminalAndGDB("finish");
 }
 
 // let currentLine = 1;
