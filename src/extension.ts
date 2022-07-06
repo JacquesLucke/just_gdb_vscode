@@ -8,6 +8,11 @@ const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
 	rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
 });
 
+interface PacketListener {
+	receive(type: string, data: any): void;
+	cancelled?(): boolean;
+};
+
 class DebugSession {
 	gdbBinaryPath: string;
 	gdbArgs: string[];
@@ -16,6 +21,7 @@ class DebugSession {
 	gdbProcess: child_process.ChildProcess | null = null;
 	private currentTerminalLine: string = "";
 	private currentPacketStr: string | null = null;
+	packetListeners: PacketListener[];
 
 	constructor(gdbBinaryPath: string, args: string[], terminalName: string) {
 		this.gdbBinaryPath = gdbBinaryPath;
@@ -31,6 +37,33 @@ class DebugSession {
 			}
 		});
 		vscode.commands.executeCommand('setContext', 'just-gdb.isDebugging', true);
+
+		this.packetListeners = [];
+		this.packetListeners.push({
+			receive(type, data) {
+				if (type == 'continue') {
+					vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
+				}
+			},
+		});
+		this.packetListeners.push({
+			receive(type, data) {
+				if (type == 'current_position') {
+					let filePath: string = data['file_path'];
+					const line: number = data['line'];
+					if (filePath == 'main.cc') {
+						filePath = '/home/jacques/Documents/test_c_debug/main.cc';
+					}
+					vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
+						const range = new vscode.Range(line, 0, line, 100000);
+						editor.setDecorations(currentLineDecorationType, [range]);
+						editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+						// Would be nice to move the vscode window to the front here, but there does
+						// not seem to be an API for that.
+					});
+				}
+			},
+		});
 	}
 
 	private onTerminalOpen() {
@@ -119,25 +152,14 @@ class DebugSession {
 	private processPacket(packet: any) {
 		const packetType = packet['type'];
 
-		if (packetType == "current_position") {
-			let filePath: string = packet['file_path'];
-			const line: number = packet["line"];
-			if (filePath == "main.cc") {
-				filePath = "/home/jacques/Documents/test_c_debug/main.cc";
+		const nextListeners = [];
+		for (const listener of this.packetListeners) {
+			if (listener.cancelled === undefined || !listener.cancelled()) {
+				listener.receive(packetType, packet);
+				nextListeners.push(listener);
 			}
-			vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
-				const range = new vscode.Range(line, 0, line, 100000);
-				editor.setDecorations(currentLineDecorationType, [range]);
-				editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-				// Would be nice to move the vscode window to the front here, but there does
-				// not seem to be an API for that.
-			});
-			console.log("update position")
 		}
-		if (packetType == "continue") {
-			console.log("continue");
-			vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
-		}
+		this.packetListeners = nextListeners;
 	}
 
 	private onProcessStderr(data: Buffer) {
@@ -196,6 +218,28 @@ export function activate(context: vscode.ExtensionContext) {
 	for (const item of commands) {
 		context.subscriptions.push(vscode.commands.registerCommand(item[0], item[1]));
 	}
+
+	vscode.languages.registerHoverProvider('cpp', {
+		provideHover(document, position, token) {
+			const lineStr = document.lineAt(position.line).text;
+			const hoverIndex = position.character;
+			let startIndex = hoverIndex;
+			const matchRegex = /[a-zA-Z0-9_]/;
+			while (startIndex > 0 && lineStr[startIndex - 1].match(matchRegex)) {
+				startIndex--;
+			}
+			let endIndex = hoverIndex;
+			while (endIndex < lineStr.length - 1 && lineStr[endIndex].match(matchRegex)) {
+				endIndex++;
+			}
+			const word = lineStr.slice(startIndex, endIndex);
+			console.log(word);
+			debugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + word + "\")")
+			return new Promise(resolve => {
+				resolve(new vscode.Hover('test'));
+			});
+		}
+	})
 
 	// vscode.window.createTreeView("gdbThreads", { treeDataProvider: new ThreadsViewProvider() });
 }

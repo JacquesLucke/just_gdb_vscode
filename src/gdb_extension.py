@@ -31,3 +31,19 @@ def handle_continue(event):
   })
 
 gdb.events.cont.connect(handle_continue)
+
+def request_hover_value(expression: str):
+  try:
+    value = gdb.parse_and_eval(expression)
+  except:
+    send_data_to_vscode({
+      "type": "hover_value_fail",
+      "expression": expression,
+    })
+    return
+  value_str = str(value)
+  send_data_to_vscode({
+    "type": "hover_value",
+    "expression": expression,
+    "value": value_str,
+  })
