@@ -39,6 +39,10 @@ class DebugSession {
 	}
 
 	private onUserInputInTerminal(data: string) {
+		if (data.charCodeAt(0) == 3) { // Ctrl+C
+			this.interrupt();
+			return;
+		}
 		if (data.endsWith("\r")) { // Enter
 			this.terminalWriteEmitter.fire("\n\r");
 			this.forwardTextToGDB(this.currentTerminalLine + "\n");
@@ -52,8 +56,10 @@ class DebugSession {
 			return;
 		}
 		if (data === '\t') { // Tab
+			// Auto-complete is not quite working yet.
 			this.forwardTextToGDB(this.currentTerminalLine);
 			this.forwardTextToGDB('\t');
+			this.terminalWriteEmitter.fire('\n\r');
 			return;
 		}
 		this.currentTerminalLine += data;
