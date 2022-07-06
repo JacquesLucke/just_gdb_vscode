@@ -9,8 +9,7 @@ const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
 });
 
 interface PacketListener {
-	receive(type: string, data: any): void;
-	cancelled?(): boolean;
+	receive(type: string, data: any): boolean;
 };
 
 class DebugSession {
@@ -44,6 +43,7 @@ class DebugSession {
 				if (type == 'continue') {
 					vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
 				}
+				return true;
 			},
 		});
 		this.packetListeners.push({
@@ -62,6 +62,7 @@ class DebugSession {
 						// not seem to be an API for that.
 					});
 				}
+				return true;
 			},
 		});
 	}
@@ -154,8 +155,7 @@ class DebugSession {
 
 		const nextListeners = [];
 		for (const listener of this.packetListeners) {
-			if (listener.cancelled === undefined || !listener.cancelled()) {
-				listener.receive(packetType, packet);
+			if (listener.receive(packetType, packet)) {
 				nextListeners.push(listener);
 			}
 		}
@@ -232,11 +232,30 @@ export function activate(context: vscode.ExtensionContext) {
 			while (endIndex < lineStr.length - 1 && lineStr[endIndex].match(matchRegex)) {
 				endIndex++;
 			}
-			const word = lineStr.slice(startIndex, endIndex);
-			console.log(word);
-			debugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + word + "\")")
-			return new Promise(resolve => {
-				resolve(new vscode.Hover('test'));
+			const expression = lineStr.slice(startIndex, endIndex);
+			if (expression.length == 0) {
+				return undefined;
+			}
+			debugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
+			return new Promise((resolve, reject) => {
+				debugSession?.packetListeners.push({
+					receive(type, data) {
+						if (token.isCancellationRequested) {
+							return false;
+						}
+						if (type == 'hover_value') {
+							if (data['expression'] == expression) {
+								resolve(new vscode.Hover(data['value']));
+								return false;
+							}
+						}
+						if (type == 'hover_value_fail') {
+							reject();
+							return false;
+						}
+						return true;
+					},
+				});
 			});
 		}
 	})
