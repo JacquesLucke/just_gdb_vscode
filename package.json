@@ -42,6 +42,11 @@
 				"category": "Just GDB"
 			},
 			{
+				"command": "just-gdb.continue",
+				"title": "Continue",
+				"category": "Just GDB"
+			},
+			{
 				"command": "just-gdb.pause",
 				"title": "Pause",
 				"category": "Just GDB"
@@ -74,6 +79,11 @@
 			{
 				"command": "just-gdb.stepOut",
 				"key": "shift+F11",
+				"when": "just-gdb.isDebugging"
+			},
+			{
+				"command": "just-gdb.continue",
+				"key": "F5",
 				"when": "just-gdb.isDebugging"
 			}
 		]

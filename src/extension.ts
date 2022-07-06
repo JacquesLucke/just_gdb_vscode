@@ -128,6 +128,9 @@ class DebugSession {
 			vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
 				const range = new vscode.Range(line, 0, line, 100000);
 				editor.setDecorations(currentLineDecorationType, [range]);
+				editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+				// Would be nice to move the vscode window to the front here, but there does
+				// not seem to be an API for that.
 			});
 			console.log("update position")
 		}
@@ -187,6 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
 		['just-gdb.stepOver', COMMAND_stepOver],
 		['just-gdb.stepInto', COMMAND_stepInto],
 		['just-gdb.stepOut', COMMAND_stepOut],
+		['just-gdb.continue', COMMAND_continue],
 	];
 
 	for (const item of commands) {
@@ -208,7 +212,7 @@ function COMMAND_startGDB() {
 		return;
 	}
 
-	debugSession = new DebugSession("gdb", ["/home/jacques/Documents/test_c_debug/a.out"], "GDB");
+	debugSession = new DebugSession("gdb", ["/home/jacques/blender/build_debug/bin/blender"], "GDB");
 	debugSession.terminal.show();
 }
 
@@ -233,6 +237,10 @@ function COMMAND_stepInto() {
 
 function COMMAND_stepOut() {
 	debugSession?.sendCommandToTerminalAndGDB("finish");
+}
+
+function COMMAND_continue() {
+	debugSession?.sendCommandToTerminalAndGDB("c");
 }
 
 // let currentLine = 1;
