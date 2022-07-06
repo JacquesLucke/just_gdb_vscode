@@ -59,7 +59,24 @@
 					"name": "GDB Threads"
 				}
 			]
-		}
+		},
+		"keybindings": [
+			{
+				"command": "just-gdb.stepOver",
+				"key": "F10",
+				"when": "just-gdb.isDebugging"
+			},
+			{
+				"command": "just-gdb.stepInto",
+				"key": "F11",
+				"when": "just-gdb.isDebugging"
+			},
+			{
+				"command": "just-gdb.stepOut",
+				"key": "shift+F11",
+				"when": "just-gdb.isDebugging"
+			}
+		]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",

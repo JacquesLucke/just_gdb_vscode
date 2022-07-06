@@ -30,6 +30,7 @@ class DebugSession {
 				handleInput: this.onUserInputInTerminal.bind(this),
 			}
 		});
+		vscode.commands.executeCommand('setContext', 'just-gdb.isDebugging', true);
 	}
 
 	private onTerminalOpen() {
@@ -143,6 +144,7 @@ class DebugSession {
 		debugSession = null;
 		this.gdbProcess?.kill();
 		this.terminalWriteEmitter.fire("\n\r\n\rGDB exited.\n\r");
+		vscode.commands.executeCommand('setContext', 'just-gdb.isDebugging', false);
 	}
 
 	private processOutputToTerminal(data: Buffer) {
