@@ -2,13 +2,20 @@ import * as vscode from 'vscode';
 import * as child_process from 'child_process';
 import * as path from 'path';
 
+const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
+	isWholeLine: true,
+	backgroundColor: new vscode.ThemeColor("editor.stackFrameHighlightBackground"),
+	rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+});
+
 class DebugSession {
 	gdbBinaryPath: string;
 	gdbArgs: string[];
 	terminalWriteEmitter: vscode.EventEmitter<string>;
 	terminal: vscode.Terminal;
 	gdbProcess: child_process.ChildProcess | null = null;
-	currentTerminalLine: string = "";
+	private currentTerminalLine: string = "";
+	private currentPacketStr: string | null = null;
 
 	constructor(gdbBinaryPath: string, args: string[], terminalName: string) {
 		this.gdbBinaryPath = gdbBinaryPath;
@@ -70,11 +77,72 @@ class DebugSession {
 
 	private onProcessStdout(data: Buffer) {
 		this.processOutputToTerminal(data);
+		const dataStr = data.toString();
+		this.tryDetectPackets(dataStr);
+
 	}
+
+	private tryDetectPackets(dataStr: string) {
+		const startTag = "##!@";
+		const endTag = [...startTag].reverse().join('');
+
+		if (this.currentPacketStr === null) {
+			const packetStart = dataStr.indexOf(startTag);
+			if (packetStart === -1) {
+				return;
+			}
+			const packetEnd = dataStr.indexOf(endTag, packetStart);
+			if (packetEnd === -1) {
+				this.currentPacketStr = dataStr.slice(packetStart);
+				return;
+			}
+			const packetStr = dataStr.slice(packetStart + startTag.length, packetEnd);
+			const packet = JSON.parse(packetStr);
+			this.processPacket(packet);
+			const remainingPacketStr = dataStr.slice(packetEnd + endTag.length);
+			this.tryDetectPackets(remainingPacketStr);
+			return;
+		}
+		const packetEnd = dataStr.indexOf(endTag);
+		if (packetEnd === -1) {
+			this.currentPacketStr += dataStr;
+			return;
+		}
+		const packetStr = this.currentPacketStr + dataStr.slice(0, packetEnd);
+		const packet = JSON.parse(packetStr);
+		this.processPacket(packet);
+		const remainingPacketStr = dataStr.slice(packetEnd + endTag.length);
+		this.tryDetectPackets(remainingPacketStr);
+	}
+
+	private processPacket(packet: any) {
+		const packetType = packet['type'];
+
+		if (packetType == "current_position") {
+			let filePath: string = packet['file_path'];
+			const line: number = packet["line"];
+			if (filePath == "main.cc") {
+				filePath = "/home/jacques/Documents/test_c_debug/main.cc";
+			}
+			vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
+				const range = new vscode.Range(line, 0, line, 100000);
+				editor.setDecorations(currentLineDecorationType, [range]);
+			});
+			console.log("update position")
+		}
+		if (packetType == "continue") {
+			console.log("continue");
+			vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
+		}
+	}
+
 	private onProcessStderr(data: Buffer) {
 		this.processOutputToTerminal(data);
 	}
-	private onProcessClose() { }
+	private onProcessClose() {
+		debugSession = null;
+		this.gdbProcess?.kill();
+	}
 
 	private processOutputToTerminal(data: Buffer) {
 		const data_str = data.toString();
@@ -100,7 +168,6 @@ class DebugSession {
 
 	interrupt() {
 		this.gdbProcess?.kill('SIGINT');
-		this.sendCommandToTerminalAndGDB("python print_file_stack()")
 	}
 };
 
