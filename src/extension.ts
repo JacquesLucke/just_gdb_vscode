@@ -80,6 +80,10 @@ class DebugSession {
 		this.gdbProcess.on('close', this.onProcessClose.bind(this));
 
 		this.sendCommandToTerminalAndGDB("source " + gdbExtensionPath);
+
+		this.executePythonFunction("set_breakpoints", {
+			vscode_breakpoints: vscode.debug.breakpoints
+		})
 	}
 
 	private onTerminalClose() {
@@ -189,6 +193,12 @@ class DebugSession {
 		}
 	}
 
+	executePythonFunction(functionName: string, args: object) {
+		const argsStr = JSON.stringify(args);
+		const argsBase64 = Buffer.from(argsStr).toString('base64');
+		this.sendCommandToTerminalAndGDB(`python execute_function("${functionName}", "${argsBase64}")`);
+	}
+
 	sendCommandToTerminalAndGDB(command: string) {
 		this.terminalWriteEmitter.fire(command + "\n\r");
 		this.forwardTextToGDB(command + "\n");
@@ -268,6 +278,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	threadsViewProvider = new ThreadsViewProvider();
 	vscode.window.createTreeView("gdbThreads", { treeDataProvider: threadsViewProvider });
+
+	// Start loading breakpoints. Also see https://github.com/microsoft/vscode/issues/130138.
+	vscode.debug.breakpoints;
 }
 
 export function deactivate() { }

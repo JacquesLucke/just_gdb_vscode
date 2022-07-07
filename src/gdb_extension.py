@@ -1,4 +1,5 @@
 import json
+import base64
 
 start_tag = "##!@"
 end_tag = start_tag[::-1]
@@ -58,3 +59,24 @@ def request_backtrace():
     "type": "backtrace",
     "frames": frames,
   })
+
+def execute_function(function_name: str, kwargs_base64: str):
+  kwargs_str = base64.b64decode(kwargs_base64)
+  kwargs = json.loads(kwargs_str)
+  f = allowed_functions_by_name[function_name]
+  f(**kwargs)
+
+def set_breakpoints(vscode_breakpoints):
+  from pprint import pprint
+  pprint(vscode_breakpoints)
+  for vscode_breakpoint in vscode_breakpoints:
+    if 'location' in vscode_breakpoint:
+      path = vscode_breakpoint['location']['uri']['path']
+      line = vscode_breakpoint['location']['range'][0]['line'] + 1
+      gdb.Breakpoint(source=path, line=line)
+
+
+allowed_function_list = [
+  set_breakpoints
+]
+allowed_functions_by_name = {f.__name__ : f for f in allowed_function_list}
