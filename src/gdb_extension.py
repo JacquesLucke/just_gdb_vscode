@@ -67,16 +67,25 @@ def execute_function(function_name: str, kwargs_base64: str):
   f(**kwargs)
 
 def set_breakpoints(vscode_breakpoints):
-  from pprint import pprint
-  pprint(vscode_breakpoints)
   for vscode_breakpoint in vscode_breakpoints:
     if 'location' in vscode_breakpoint:
       path = vscode_breakpoint['location']['uri']['path']
       line = vscode_breakpoint['location']['range'][0]['line'] + 1
       gdb.Breakpoint(source=path, line=line)
 
+def remove_breakpoints(vscode_breakpoints):
+  for vscode_breakpoint in vscode_breakpoints:
+    if 'location' in vscode_breakpoint:
+      path = vscode_breakpoint['location']['uri']['path']
+      line = vscode_breakpoint['location']['range'][0]['line'] + 1
+      location_str = f"-source {path} -line {line}"
+      for breakpoint in gdb.breakpoints():
+        if breakpoint.location == location_str:
+          breakpoint.delete()
+
 
 allowed_function_list = [
-  set_breakpoints
+  set_breakpoints,
+  remove_breakpoints,
 ]
 allowed_functions_by_name = {f.__name__ : f for f in allowed_function_list}

@@ -281,6 +281,18 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Start loading breakpoints. Also see https://github.com/microsoft/vscode/issues/130138.
 	vscode.debug.breakpoints;
+
+	vscode.debug.onDidChangeBreakpoints(e => {
+		if (debugSession === null) {
+			return;
+		}
+		debugSession.executePythonFunction("set_breakpoints", {
+			vscode_breakpoints: e.added,
+		});
+		debugSession.executePythonFunction('remove_breakpoints', {
+			vscode_breakpoints: e.removed,
+		});
+	});
 }
 
 export function deactivate() { }
