@@ -91,6 +91,36 @@
 				"key": "F5",
 				"when": "just-gdb.isDebugging"
 			}
+		],
+		"configuration": [
+			{
+				"title": "Just GDB",
+				"properties": {
+					"justGDB.gdbPath": {
+						"type": "string",
+						"title": "GDB Path",
+						"scope": "machine",
+						"description": "Path to the GDB binary",
+						"default": "gdb"
+					},
+					"justGDB.debugPresets": {
+						"type": "array",
+						"title": "Debug Presets",
+						"scope": "resource",
+						"description": "Preconfigured debug sessions for easy access",
+						"items": {
+							"type": "object",
+							"title": "Debug Preset",
+							"properties": {
+								"program": {
+									"type": "string",
+									"description": "Path to the program that should be debugged"
+								}
+							}
+						}
+					}
+				}
+			}
 		]
 	},
 	"scripts": {

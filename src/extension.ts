@@ -277,12 +277,60 @@ const sourceDir = path.join(mainDir, "src");
 const gdbExtensionPath = path.join(sourceDir, "gdb_extension.py")
 
 
+function getGlobalConfig() {
+	return vscode.workspace.getConfiguration("justGDB");
+}
+
+function getCurrentWorkspaceFolder() {
+	const editor = vscode.window.activeTextEditor;
+	if (editor?.document) {
+		const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+		if (folder !== undefined) {
+			return folder;
+		}
+	}
+	const folders = vscode.workspace.workspaceFolders;
+	if (folders === undefined || folders.length === 0) {
+		return undefined;
+	}
+	return folders[0];
+}
+
+function getAppConfig(workspaceFolder: vscode.WorkspaceFolder) {
+	return vscode.workspace.getConfiguration("justGDB", workspaceFolder);
+}
+
+interface DebugPreset {
+	program: string;
+}
+
 function COMMAND_startGDB() {
 	if (debugSession !== null) {
+		vscode.window.showErrorMessage("GDB session is active already.");
 		return;
 	}
 
-	debugSession = new DebugSession("gdb", ["/home/jacques/blender/build_debug/bin/blender"], "GDB");
+	const globalConfig = getGlobalConfig();
+	const gdbPath = globalConfig.get<string>('gdbPath', 'gdb');
+
+	const workspaceFolder = getCurrentWorkspaceFolder();
+	if (workspaceFolder === undefined) {
+		vscode.window.showErrorMessage("There is no workspace folder.");
+		return;
+	}
+	const appConfig = getAppConfig(workspaceFolder);
+	if (appConfig === undefined) {
+		vscode.window.showErrorMessage("Could not find app configuration.");
+		return;
+	}
+	const debugPresets = appConfig.get<DebugPreset[]>("debugPresets", []);
+	if (debugPresets.length === 0) {
+		vscode.window.showErrorMessage("No debug preset found.");
+		return;
+	}
+	const debugPreset = debugPresets[0];
+	const program = debugPreset.program.replace("${workspaceFolder}", workspaceFolder.uri.fsPath);
+	debugSession = new DebugSession(gdbPath, [program], "GDB");
 	debugSession.terminal.show();
 }
 
