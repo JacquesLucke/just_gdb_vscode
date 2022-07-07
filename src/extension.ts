@@ -235,7 +235,7 @@ export function activate(context: vscode.ExtensionContext) {
 		context.subscriptions.push(vscode.commands.registerCommand(item[0], item[1]));
 	}
 
-	vscode.languages.registerHoverProvider('cpp', {
+	const hoverProvider: vscode.HoverProvider = {
 		provideHover(document, position, token) {
 			const lineStr = document.lineAt(position.line).text;
 			const hoverIndex = position.character;
@@ -252,8 +252,9 @@ export function activate(context: vscode.ExtensionContext) {
 			if (expression.length == 0) {
 				return undefined;
 			}
-			debugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
+
 			return new Promise((resolve, reject) => {
+				debugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
 				debugSession?.packetListeners.push({
 					receive(type, data) {
 						if (token.isCancellationRequested) {
@@ -274,7 +275,10 @@ export function activate(context: vscode.ExtensionContext) {
 				});
 			});
 		}
-	})
+	};
+
+	vscode.languages.registerHoverProvider('cpp', hoverProvider);
+	vscode.languages.registerHoverProvider('c', hoverProvider);
 
 	threadsViewProvider = new ThreadsViewProvider();
 	vscode.window.createTreeView("gdbThreads", { treeDataProvider: threadsViewProvider });
@@ -286,6 +290,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (debugSession === null) {
 			return;
 		}
+		// Todo: Potentially interrupt the application to set breakpoints.
 		debugSession.executePythonFunction("set_breakpoints", {
 			vscode_breakpoints: e.added,
 		});
