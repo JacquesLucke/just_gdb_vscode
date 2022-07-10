@@ -20,7 +20,6 @@ def invoke_vscode_function(name: str, **kwargs):
 
 
 def handle_stop(event):
-    file_names = []
     frame = gdb.newest_frame()
     while frame is not None:
         if sal := frame.find_sal():
