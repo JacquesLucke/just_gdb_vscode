@@ -60,6 +60,11 @@
 				"command": "just-gdb.checkForMoreThreads",
 				"title": "Check for more Threads",
 				"category": "Just GDB"
+			},
+			{
+				"command": "just-gdb.loadAllAvailableContexts",
+				"title": "Load all available contexts",
+				"category": "Just GDB"
 			}
 		],
 		"views": {

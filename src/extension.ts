@@ -364,6 +364,7 @@ export function activate(context: vscode.ExtensionContext) {
     ["just-gdb.continue", COMMAND_continue],
     ["just-gdb.loadSelectedContext", COMMAND_loadSelectedContext],
     ["just-gdb.checkForMoreThreads", COMMAND_checkForMoreThreads],
+    ["just-gdb.loadAllAvailableContexts", COMMAND_loadAllAvailableContexts],
   ];
 
   for (const item of commands) {
@@ -568,6 +569,13 @@ function COMMAND_checkForMoreThreads(inferiorID: number) {
   );
 }
 
+function COMMAND_loadAllAvailableContexts() {
+  globalDebugSession?.executePythonFunctionInGDB(
+    "request_all_available_contexts",
+    {}
+  );
+}
+
 // let currentLine = 1;
 
 // const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
@@ -709,11 +717,14 @@ class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem> {
     const topLevelItems = [];
     if (globalDebugSession === null) {
       topLevelItems.push(new StartDebuggingContextItem());
-    } else if (availableContextsCache.inferiors.size == 0) {
-      topLevelItems.push(new LoadSelectedContextItem());
     } else {
-      for (const inferior of availableContextsCache.inferiors.values()) {
-        topLevelItems.push(new ContextInferiorItem(inferior));
+      topLevelItems.push(new LoadAllAvailableContextsItem());
+      if (availableContextsCache.inferiors.size == 0) {
+        topLevelItems.push(new LoadSelectedContextItem());
+      } else {
+        for (const inferior of availableContextsCache.inferiors.values()) {
+          topLevelItems.push(new ContextInferiorItem(inferior));
+        }
       }
     }
     return topLevelItems;
@@ -753,13 +764,23 @@ class LoadThreadsInInferiorContextItem extends ContextViewItem {
   }
 }
 
+class LoadAllAvailableContextsItem extends ContextViewItem {
+  constructor() {
+    super("Load all available contexts");
+    this.command = {
+      title: "Load all available contexts",
+      command: "just-gdb.loadAllAvailableContexts",
+    };
+  }
+}
+
 class ContextInferiorItem extends ContextViewItem {
   inferior: InferiorContextCache;
 
   constructor(inferior: InferiorContextCache) {
     super(inferior.inferiorName);
     this.inferior = inferior;
-    this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+    this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   }
 }
 
@@ -769,7 +790,7 @@ class ContextThreadItem extends ContextViewItem {
   constructor(thread: ThreadContextCache) {
     super(thread.threadName);
     this.thread = thread;
-    this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+    this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   }
 }
 

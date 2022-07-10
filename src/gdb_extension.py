@@ -142,6 +142,19 @@ def request_all_threads_in_inferior(inferior_id: int):
 
 
 @vscode_callable
+def request_all_available_contexts():
+    for inferior in gdb.inferiors():
+        send_found_inferior(inferior)
+        for thread in inferior.threads():
+            send_found_thread(inferior, thread)
+            thread.switch()
+            frame = gdb.newest_frame()
+            while frame is not None:
+                send_found_frame(inferior, thread, frame)
+                frame = frame.older()
+
+
+@vscode_callable
 def request_current_position():
     frame = gdb.newest_frame()
     while frame is not None:
