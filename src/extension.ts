@@ -323,7 +323,7 @@ export function activate(context: vscode.ExtensionContext) {
 						hoverReject();
 					}
 				});
-				globalDebugSession?.executeInternalCommandInGDB("python request_hover_value(\"" + expression + "\")")
+				globalDebugSession?.executePythonFunctionInGDB('request_hover_value', { expression });
 			});
 		}
 	};
@@ -459,7 +459,7 @@ function COMMAND_continue() {
 }
 
 function COMMAND_loadBacktrace() {
-	globalDebugSession?.executeInternalCommandInGDB("python request_backtrace()");
+	globalDebugSession?.executePythonFunctionInGDB('request_backtrace', {});
 }
 
 // let currentLine = 1;

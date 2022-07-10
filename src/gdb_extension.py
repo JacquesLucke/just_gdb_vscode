@@ -38,33 +38,6 @@ def handle_continue(event):
 
 gdb.events.cont.connect(handle_continue)
 
-def request_hover_value(expression: str):
-  try:
-    value = gdb.parse_and_eval(expression)
-  except:
-    invoke_vscode_function(
-      "hoverRequestFailed",
-      expression=expression,
-    )
-    return
-  value_str = str(value)
-  invoke_vscode_function(
-    "hoverRequestFinished",
-    expression=expression,
-    value=value_str
-  )
-
-def request_backtrace():
-  frame = gdb.newest_frame()
-  frames = []
-  while frame is not None:
-    frames.append(str(frame.function()))
-    frame = frame.older()
-  invoke_vscode_function(
-    "backtraceRequestFinished",
-    frames=frames,
-  )
-
 def invoke_function_from_vscode(function_name: str, kwargs_base64: str):
   kwargs_str = base64.b64decode(kwargs_base64)
   kwargs = json.loads(kwargs_str)
@@ -95,3 +68,32 @@ def remove_breakpoints(vscode_breakpoints):
       for breakpoint in gdb.breakpoints():
         if breakpoint.location == location_str:
           breakpoint.delete()
+
+@vscode_callable
+def request_hover_value(expression: str):
+  try:
+    value = gdb.parse_and_eval(expression)
+  except:
+    invoke_vscode_function(
+      "hoverRequestFailed",
+      expression=expression,
+    )
+    return
+  value_str = str(value)
+  invoke_vscode_function(
+    "hoverRequestFinished",
+    expression=expression,
+    value=value_str
+  )
+
+@vscode_callable
+def request_backtrace():
+  frame = gdb.newest_frame()
+  frames = []
+  while frame is not None:
+    frames.append(str(frame.function()))
+    frame = frame.older()
+  invoke_vscode_function(
+    "backtraceRequestFinished",
+    frames=frames,
+  )
