@@ -65,8 +65,8 @@
 		"views": {
 			"debug": [
 				{
-					"id": "gdbThreads",
-					"name": "GDB Threads"
+					"id": "gdbContext",
+					"name": "GDB Context"
 				}
 			]
 		},

@@ -42,9 +42,9 @@ class DebugSession {
 			receive(type, data) {
 				if (type == 'continue') {
 					vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
-					if (threadsViewProvider) {
-						threadsViewProvider.stackFrames = [];
-						threadsViewProvider.refresh();
+					if (contextViewProvider) {
+						contextViewProvider.stackFrames = [];
+						contextViewProvider.refresh();
 					}
 				}
 				return true;
@@ -215,7 +215,7 @@ class DebugSession {
 
 
 let debugSession: DebugSession | null = null;
-let threadsViewProvider: ThreadsViewProvider | null = null;
+let contextViewProvider: ContextViewProvider | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -237,15 +237,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const hoverProvider: vscode.HoverProvider = {
 		provideHover(document, position, token) {
+			if (debugSession === null) {
+				return;
+			}
 			const lineStr = document.lineAt(position.line).text;
 			const hoverIndex = position.character;
 			let startIndex = hoverIndex;
-			const matchRegex = /[a-zA-Z0-9_]/;
-			while (startIndex > 0 && lineStr[startIndex - 1].match(matchRegex)) {
+			while (startIndex > 0 && lineStr[startIndex - 1].match(/[a-zA-Z0-9_\.]/)) {
 				startIndex--;
 			}
 			let endIndex = hoverIndex;
-			while (endIndex < lineStr.length - 1 && lineStr[endIndex].match(matchRegex)) {
+			while (endIndex < lineStr.length - 1 && lineStr[endIndex].match(/[a-zA-Z0-9_]/)) {
 				endIndex++;
 			}
 			const expression = lineStr.slice(startIndex, endIndex);
@@ -280,8 +282,8 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.languages.registerHoverProvider('cpp', hoverProvider);
 	vscode.languages.registerHoverProvider('c', hoverProvider);
 
-	threadsViewProvider = new ThreadsViewProvider();
-	vscode.window.createTreeView("gdbThreads", { treeDataProvider: threadsViewProvider });
+	contextViewProvider = new ContextViewProvider();
+	vscode.window.createTreeView("gdbContext", { treeDataProvider: contextViewProvider });
 
 	// Start loading breakpoints. Also see https://github.com/microsoft/vscode/issues/130138.
 	vscode.debug.breakpoints;
@@ -395,9 +397,9 @@ function COMMAND_loadBacktrace() {
 	debugSession?.packetListeners.push({
 		receive(type, data) {
 			if (type === 'backtrace') {
-				if (threadsViewProvider !== null) {
-					threadsViewProvider.stackFrames = data['frames'];
-					threadsViewProvider.refresh();
+				if (contextViewProvider !== null) {
+					contextViewProvider.stackFrames = data['frames'];
+					contextViewProvider.refresh();
 					return false;
 				}
 			}
@@ -435,8 +437,8 @@ function COMMAND_playground() {
 }
 
 
-class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
-	private _onDidChangeTreeData = new vscode.EventEmitter<ThreadsViewItem | undefined | null | void>();
+class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem>{
+	private _onDidChangeTreeData = new vscode.EventEmitter<ContextViewItem | undefined | null | void>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
 	stackFrames: string[] = [];
@@ -445,11 +447,11 @@ class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
 		this._onDidChangeTreeData.fire();
 	}
 
-	getTreeItem(element: ThreadsViewItem) {
+	getTreeItem(element: ContextViewItem) {
 		return element;
 	}
 
-	getChildren(element?: ThreadsViewItem): vscode.ProviderResult<ThreadsViewItem[]> {
+	getChildren(element?: ContextViewItem): vscode.ProviderResult<ContextViewItem[]> {
 		if (element) {
 			return [];
 		}
@@ -465,10 +467,10 @@ class ThreadsViewProvider implements vscode.TreeDataProvider<ThreadsViewItem>{
 	}
 };
 
-class ThreadsViewItem extends vscode.TreeItem {
+class ContextViewItem extends vscode.TreeItem {
 };
 
-class LoadBacktraceItem extends ThreadsViewItem {
+class LoadBacktraceItem extends ContextViewItem {
 	constructor() {
 		super("Load");
 		this.command = {
@@ -478,7 +480,7 @@ class LoadBacktraceItem extends ThreadsViewItem {
 	}
 };
 
-class StackFrameItem extends ThreadsViewItem {
+class StackFrameItem extends ContextViewItem {
 	constructor(label: string) {
 		super(label);
 	}
