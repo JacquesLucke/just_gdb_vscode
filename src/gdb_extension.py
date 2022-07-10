@@ -104,13 +104,23 @@ def request_backtrace():
 def request_current_position():
     frame = gdb.newest_frame()
     while frame is not None:
-        if sal := frame.find_sal():
-            if symtab := sal.symtab:
-                if filename := symtab.filename:
-                    invoke_vscode_function(
-                        "currentPositionRequestFinished",
-                        filePath=filename,
-                        line=sal.line - 1,
-                    )
-                    return
-        frame = frame.older()
+        sal = frame.find_sal()
+        if sal is None:
+            frame = frame.older()
+            continue
+        symtab = sal.symtab
+        if symtab is None:
+            frame = frame.older()
+            continue
+        is_newest_frame = frame == gdb.newest_frame()
+        filepath = symtab.fullname()
+        # GDB line indices start at 1.
+        line = sal.line - 1
+        invoke_vscode_function(
+            "currentPositionRequestFinished",
+            isNewestFrame=is_newest_frame,
+            filePath=filepath,
+            line=line,
+        )
+        return
+    invoke_vscode_function("currentPositionRequestFailed")

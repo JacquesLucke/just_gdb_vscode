@@ -10,6 +10,14 @@ const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
   rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
 });
 
+const focusedLineDecorationType = vscode.window.createTextEditorDecorationType({
+  isWholeLine: true,
+  backgroundColor: new vscode.ThemeColor(
+    "editor.focusedStackFrameHighlightBackground"
+  ),
+  rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+});
+
 interface PacketFromGDB {
   functionName: string;
   args: object;
@@ -17,7 +25,10 @@ interface PacketFromGDB {
 
 interface HandleStopEventArgs {}
 
+interface CurrentPositionRequestFailedArgs {}
+
 interface CurrentPositionRequestFinishedArgs {
+  isNewestFrame: boolean;
   filePath: string;
   line: number;
 }
@@ -81,6 +92,7 @@ class DebugSession {
       this.hoverRequestFailed,
       this.backtraceRequestFinished,
       this.currentPositionRequestFinished,
+      this.currentPositionRequestFailed,
     ];
     for (const callable of callables) {
       this.registeredCallablesByName.set(callable.name, callable.bind(this));
@@ -99,8 +111,14 @@ class DebugSession {
     this.startupFinished();
   }
 
+  private cleanupAfterSession() {
+    this.clearLineDecorations();
+    this.resetContextView();
+  }
+
   private onTerminalClose() {
     this.gdbProcess?.kill();
+    this.cleanupAfterSession();
   }
 
   private onUserInputInTerminal(data: string) {
@@ -204,6 +222,7 @@ class DebugSession {
     this.gdbProcess?.kill();
     this.terminalWriteEmitter.fire("\n\r\n\rGDB exited.\n\r");
     vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", false);
+    this.cleanupAfterSession();
   }
 
   executePythonFunctionInGDB(functionName: string, args: object) {
@@ -232,15 +251,23 @@ class DebugSession {
     this.gdbProcess?.kill("SIGINT");
   }
 
-  handleContinueEvent(args: any) {
-    vscode.window.activeTextEditor?.setDecorations(
-      currentLineDecorationType,
-      []
-    );
+  clearLineDecorations() {
+    for (const editor of vscode.window.visibleTextEditors) {
+      editor.setDecorations(currentLineDecorationType, []);
+      editor.setDecorations(focusedLineDecorationType, []);
+    }
+  }
+
+  resetContextView() {
     if (contextViewProvider) {
       contextViewProvider.stackFrames = [];
       contextViewProvider.refresh();
     }
+  }
+
+  handleContinueEvent(args: any) {
+    this.clearLineDecorations();
+    this.resetContextView();
   }
 
   handleStopEvent(args: HandleStopEventArgs) {
@@ -255,7 +282,10 @@ class DebugSession {
     }
     vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
       const range = new vscode.Range(line, 0, line, 100000);
-      editor.setDecorations(currentLineDecorationType, [range]);
+      const decorationType = args.isNewestFrame
+        ? currentLineDecorationType
+        : focusedLineDecorationType;
+      editor.setDecorations(decorationType, [range]);
       editor.revealRange(
         range,
         vscode.TextEditorRevealType.InCenterIfOutsideViewport
@@ -264,6 +294,8 @@ class DebugSession {
       // not seem to be an API for that.
     });
   }
+
+  currentPositionRequestFailed(args: CurrentPositionRequestFailedArgs) {}
 
   hoverRequestFinished(args: HoverRequestFinishedArgs) {
     const remainingRequests = [];
