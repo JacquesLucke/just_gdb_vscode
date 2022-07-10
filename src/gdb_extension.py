@@ -88,13 +88,34 @@ def request_hover_value(expression: str):
 
 
 @vscode_callable
-def request_backtrace():
+def request_backtrace_for_current_thread():
+    thread = gdb.selected_thread()
     frame = gdb.newest_frame()
+    inferior = thread.inferior
+
+    invoke_vscode_function(
+        "foundInferiorContext",
+        inferiorID=inferior.num,
+        inferiorName=inferior.progspace.filename,
+    )
+
+    invoke_vscode_function(
+        "foundThreadContext",
+        inferiorID=inferior.num,
+        globalThreadID=thread.global_num,
+        threadName="<no name>" if thread.name is None else thread.name,
+    )
+
+    level = 0
     while frame is not None:
         invoke_vscode_function(
-            "backtraceRequestFinished",
-            frames=[str(frame.function())],
+            "foundFrameContext",
+            inferiorID=inferior.num,
+            globalThreadID=thread.global_num,
+            functionName=str(frame.function()),
+            level=level,
         )
+        level += 1
         frame = frame.older()
 
 

@@ -33,8 +33,22 @@ interface CurrentPositionRequestFinishedArgs {
   line: number;
 }
 
-interface BacktraceRequestFinishedArgs {
-  frames: string[];
+interface FoundInferiorContextArgs {
+  inferiorID: number;
+  inferiorName: string;
+}
+
+interface FoundThreadContextArgs {
+  inferiorID: number;
+  globalThreadID: number;
+  threadName: string;
+}
+
+interface FoundFrameContextArgs {
+  inferiorID: number;
+  globalThreadID: number;
+  functionName: string;
+  level: number;
 }
 
 interface HoverRequestFinishedArgs {
@@ -90,7 +104,9 @@ class DebugSession {
       this.handleStopEvent,
       this.hoverRequestFinished,
       this.hoverRequestFailed,
-      this.backtraceRequestFinished,
+      this.foundInferiorContext,
+      this.foundThreadContext,
+      this.foundFrameContext,
       this.currentPositionRequestFinished,
       this.currentPositionRequestFailed,
     ];
@@ -260,7 +276,7 @@ class DebugSession {
 
   resetContextView() {
     if (contextViewProvider) {
-      contextViewProvider.stackFrames = [];
+      availableContextsCache.clear();
       contextViewProvider.refresh();
     }
   }
@@ -318,12 +334,19 @@ class DebugSession {
     this.pendingHoverRequests = remainingRequests;
   }
 
-  backtraceRequestFinished(args: BacktraceRequestFinishedArgs) {
-    if (contextViewProvider !== null) {
-      contextViewProvider.stackFrames.push(...args.frames);
-      contextViewProvider.refresh();
-      return false;
-    }
+  foundInferiorContext(args: FoundInferiorContextArgs) {
+    availableContextsCache.addInferior(args);
+    contextViewProvider?.refresh();
+  }
+
+  foundThreadContext(args: FoundThreadContextArgs) {
+    availableContextsCache.addThread(args);
+    contextViewProvider?.refresh();
+  }
+
+  foundFrameContext(args: FoundFrameContextArgs) {
+    availableContextsCache.addFrame(args);
+    contextViewProvider?.refresh();
   }
 }
 
@@ -529,7 +552,10 @@ function COMMAND_continue() {
 }
 
 function COMMAND_loadSelectedContext() {
-  globalDebugSession?.executePythonFunctionInGDB("request_backtrace", {});
+  globalDebugSession?.executePythonFunctionInGDB(
+    "request_backtrace_for_current_thread",
+    {}
+  );
 }
 
 // let currentLine = 1;
@@ -557,13 +583,86 @@ function COMMAND_playground() {
   // console.log(process.argv0);
 }
 
+class FrameContextCache {
+  level: number;
+  functionName: string;
+
+  constructor(functionName: string, level: number) {
+    this.functionName = functionName;
+    this.level = level;
+  }
+}
+
+class ThreadContextCache {
+  globalID: number;
+  threadName: string;
+  frames = new Map<number, FrameContextCache>();
+
+  constructor(globalID: number, threadName: string) {
+    this.globalID = globalID;
+    this.threadName = threadName;
+  }
+}
+
+class InferiorContextCache {
+  inferiorID: number;
+  inferiorName: string;
+  threads = new Map<number, ThreadContextCache>();
+
+  constructor(inferiorID: number, inferiorName: string) {
+    this.inferiorID = inferiorID;
+    this.inferiorName = inferiorName;
+  }
+}
+
+class AvailableContextsCache {
+  inferiors = new Map<number, InferiorContextCache>();
+
+  clear() {
+    this.inferiors.clear();
+  }
+
+  addInferior(data: FoundInferiorContextArgs) {
+    if (this.inferiors.has(data.inferiorID)) {
+      return;
+    }
+    this.inferiors.set(
+      data.inferiorID,
+      new InferiorContextCache(data.inferiorID, data.inferiorName)
+    );
+  }
+
+  addThread(data: FoundThreadContextArgs) {
+    const inferior = this.inferiors.get(data.inferiorID);
+    if (inferior === undefined || inferior.threads.has(data.globalThreadID)) {
+      return;
+    }
+    inferior.threads.set(
+      data.globalThreadID,
+      new ThreadContextCache(data.globalThreadID, data.threadName)
+    );
+  }
+
+  addFrame(data: FoundFrameContextArgs) {
+    const inferior = this.inferiors.get(data.inferiorID);
+    const thread = inferior?.threads.get(data.globalThreadID);
+    if (thread === undefined || thread.frames.has(data.level)) {
+      return;
+    }
+    thread.frames.set(
+      data.level,
+      new FrameContextCache(data.functionName, data.level)
+    );
+  }
+}
+
+const availableContextsCache = new AvailableContextsCache();
+
 class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<
     ContextViewItem | undefined | null | void
   >();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-  stackFrames: string[] = [];
 
   refresh() {
     this._onDidChangeTreeData.fire();
@@ -577,22 +676,36 @@ class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem> {
     element?: ContextViewItem
   ): vscode.ProviderResult<ContextViewItem[]> {
     if (element) {
-      return [];
-    } else {
-      let items = [];
-      if (globalDebugSession === null) {
-        items.push(new StartDebuggingContextItem());
-      } else {
-        if (this.stackFrames.length == 0) {
-          items.push(new LoadSelectedContextItem());
-        } else {
-          for (let name of this.stackFrames) {
-            items.push(new StackFrameItem(name));
-          }
+      if (element instanceof ContextInferiorItem) {
+        const items = [];
+        for (const thread of element.inferior.threads.values()) {
+          items.push(new ContextThreadItem(thread));
         }
+        return items;
       }
-      return items;
+      if (element instanceof ContextThreadItem) {
+        const items = [];
+        const levels = [...element.thread.frames.keys()];
+        levels.sort();
+        for (const level of levels) {
+          const frame = element.thread.frames.get(level)!;
+          items.push(new ContextFrameItem(frame));
+        }
+        return items;
+      }
+      return [];
     }
+    const topLevelItems = [];
+    if (globalDebugSession === null) {
+      topLevelItems.push(new StartDebuggingContextItem());
+    } else if (availableContextsCache.inferiors.size == 0) {
+      topLevelItems.push(new LoadSelectedContextItem());
+    } else {
+      for (const inferior of availableContextsCache.inferiors.values()) {
+        topLevelItems.push(new ContextInferiorItem(inferior));
+      }
+    }
+    return topLevelItems;
   }
 }
 
@@ -618,8 +731,31 @@ class LoadSelectedContextItem extends ContextViewItem {
   }
 }
 
-class StackFrameItem extends ContextViewItem {
-  constructor(label: string) {
-    super(label);
+class ContextInferiorItem extends ContextViewItem {
+  inferior: InferiorContextCache;
+
+  constructor(inferior: InferiorContextCache) {
+    super(inferior.inferiorName);
+    this.inferior = inferior;
+    this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+  }
+}
+
+class ContextThreadItem extends ContextViewItem {
+  thread: ThreadContextCache;
+
+  constructor(thread: ThreadContextCache) {
+    super(thread.threadName);
+    this.thread = thread;
+    this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+  }
+}
+
+class ContextFrameItem extends ContextViewItem {
+  frame: FrameContextCache;
+
+  constructor(frame: FrameContextCache) {
+    super(frame.functionName);
+    this.frame = frame;
   }
 }
