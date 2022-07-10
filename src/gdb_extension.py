@@ -90,14 +90,12 @@ def request_hover_value(expression: str):
 @vscode_callable
 def request_backtrace():
     frame = gdb.newest_frame()
-    frames = []
     while frame is not None:
-        frames.append(str(frame.function()))
+        invoke_vscode_function(
+            "backtraceRequestFinished",
+            frames=[str(frame.function())],
+        )
         frame = frame.older()
-    invoke_vscode_function(
-        "backtraceRequestFinished",
-        frames=frames,
-    )
 
 
 @vscode_callable

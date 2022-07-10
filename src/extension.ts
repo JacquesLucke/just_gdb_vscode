@@ -70,6 +70,7 @@ class DebugSession {
     terminalName: string,
     startupFinished: () => void
   ) {
+    vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", true);
     this.gdbBinaryPath = gdbBinaryPath;
     this.gdbArgs = args;
     this.startupFinished = startupFinished;
@@ -83,7 +84,6 @@ class DebugSession {
         handleInput: this.onUserInputInTerminal.bind(this),
       },
     });
-    vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", true);
 
     const callables = [
       this.handleContinueEvent,
@@ -114,6 +114,7 @@ class DebugSession {
   private cleanupAfterSession() {
     this.clearLineDecorations();
     this.resetContextView();
+    vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", false);
   }
 
   private onTerminalClose() {
@@ -221,7 +222,6 @@ class DebugSession {
     globalDebugSession = null;
     this.gdbProcess?.kill();
     this.terminalWriteEmitter.fire("\n\r\n\rGDB exited.\n\r");
-    vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", false);
     this.cleanupAfterSession();
   }
 
@@ -320,7 +320,7 @@ class DebugSession {
 
   backtraceRequestFinished(args: BacktraceRequestFinishedArgs) {
     if (contextViewProvider !== null) {
-      contextViewProvider.stackFrames = args.frames;
+      contextViewProvider.stackFrames.push(...args.frames);
       contextViewProvider.refresh();
       return false;
     }
@@ -504,6 +504,8 @@ async function COMMAND_start() {
   if (programIsSet && runDirectly) {
     globalDebugSession.executeInternalCommandInGDB("run");
   }
+
+  contextViewProvider?.refresh();
 }
 
 function COMMAND_pause() {
