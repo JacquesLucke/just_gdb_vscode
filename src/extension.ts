@@ -339,7 +339,7 @@ export function activate(context: vscode.ExtensionContext) {
     ["just-gdb.stepInto", COMMAND_stepInto],
     ["just-gdb.stepOut", COMMAND_stepOut],
     ["just-gdb.continue", COMMAND_continue],
-    ["just-gdb.loadBacktrace", COMMAND_loadBacktrace],
+    ["just-gdb.loadSelectedContext", COMMAND_loadSelectedContext],
   ];
 
   for (const item of commands) {
@@ -480,6 +480,7 @@ async function COMMAND_start() {
     "${workspaceFolder}",
     workspaceFolder.uri.fsPath
   );
+  const programIsSet = program.length > 0;
   const runDirectly = debugPreset.runDirectly;
 
   globalDebugSession = await new Promise<DebugSession>((resolve) => {
@@ -492,17 +493,16 @@ async function COMMAND_start() {
   }
 
   globalDebugSession.terminal.show();
+  if (programIsSet) {
+    globalDebugSession.executeInternalCommandInGDB(`file ${program}`);
+  }
   if (vscode.debug.breakpoints.length > 0) {
     globalDebugSession.executePythonFunctionInGDB("set_breakpoints", {
       vscode_breakpoints: vscode.debug.breakpoints,
     });
   }
-
-  if (program.length > 0) {
-    globalDebugSession.executeInternalCommandInGDB(`file ${program}`);
-    if (runDirectly) {
-      globalDebugSession.executeInternalCommandInGDB("run");
-    }
+  if (programIsSet && runDirectly) {
+    globalDebugSession.executeInternalCommandInGDB("run");
   }
 }
 
@@ -526,7 +526,7 @@ function COMMAND_continue() {
   globalDebugSession?.executeInternalCommandInGDB("c");
 }
 
-function COMMAND_loadBacktrace() {
+function COMMAND_loadSelectedContext() {
   globalDebugSession?.executePythonFunctionInGDB("request_backtrace", {});
 }
 
@@ -578,9 +578,16 @@ class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem> {
       return [];
     } else {
       let items = [];
-      items.push(new LoadBacktraceItem());
-      for (let name of this.stackFrames) {
-        items.push(new StackFrameItem(name));
+      if (globalDebugSession === null) {
+        items.push(new StartDebuggingContextItem());
+      } else {
+        if (this.stackFrames.length == 0) {
+          items.push(new LoadSelectedContextItem());
+        } else {
+          for (let name of this.stackFrames) {
+            items.push(new StackFrameItem(name));
+          }
+        }
       }
       return items;
     }
@@ -589,12 +596,22 @@ class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem> {
 
 class ContextViewItem extends vscode.TreeItem {}
 
-class LoadBacktraceItem extends ContextViewItem {
+class StartDebuggingContextItem extends ContextViewItem {
   constructor() {
-    super("Load");
+    super("Start");
     this.command = {
-      title: "Load",
-      command: "just-gdb.loadBacktrace",
+      title: "Start",
+      command: "just-gdb.start",
+    };
+  }
+}
+
+class LoadSelectedContextItem extends ContextViewItem {
+  constructor() {
+    super("Load Selected");
+    this.command = {
+      title: "Load Selected Context",
+      command: "just-gdb.loadSelectedContext",
     };
   }
 }

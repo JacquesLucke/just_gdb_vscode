@@ -52,7 +52,7 @@
 				"category": "Just GDB"
 			},
 			{
-				"command": "just-gdb.loadBacktrace",
+				"command": "just-gdb.loadSelectedContext",
 				"title": "Load Backtrace",
 				"category": "Just GDB"
 			}
@@ -65,6 +65,12 @@
 				}
 			]
 		},
+		"viewsWelcome": [
+			{
+				"view": "gdbContext",
+				"contents": "No active GDB session.\n[Start GDB](command:just-gdb.start)"
+			}
+		],
 		"keybindings": [
 			{
 				"command": "just-gdb.stepOver",
