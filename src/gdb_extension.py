@@ -1,6 +1,6 @@
+import gdb
 import json
 import base64
-import functools
 
 internal_data_tag = "##!@"
 
