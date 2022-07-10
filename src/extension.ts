@@ -18,13 +18,15 @@ class DebugSession {
 	terminalWriteEmitter: vscode.EventEmitter<string>;
 	terminal: vscode.Terminal;
 	gdbProcess: child_process.ChildProcess | null = null;
+	startupFinished: () => void;
 	private currentTerminalLine: string = "";
 	private currentPacketStr: string | null = null;
 	packetListeners: PacketListener[];
 
-	constructor(gdbBinaryPath: string, args: string[], terminalName: string) {
+	constructor(gdbBinaryPath: string, args: string[], terminalName: string, startupFinished: () => void) {
 		this.gdbBinaryPath = gdbBinaryPath;
 		this.gdbArgs = args;
+		this.startupFinished = startupFinished;
 		this.terminalWriteEmitter = new vscode.EventEmitter<string>();
 		this.terminal = vscode.window.createTerminal({
 			name: terminalName,
@@ -80,10 +82,7 @@ class DebugSession {
 		this.gdbProcess.on('close', this.onProcessClose.bind(this));
 
 		this.sendCommandToTerminalAndGDB("source " + gdbExtensionPath);
-
-		this.executePythonFunction("set_breakpoints", {
-			vscode_breakpoints: vscode.debug.breakpoints
-		})
+		this.startupFinished();
 	}
 
 	private onTerminalClose() {
@@ -174,7 +173,7 @@ class DebugSession {
 		this.processOutputToTerminal(data);
 	}
 	private onProcessClose() {
-		debugSession = null;
+		globalDebugSession = null;
 		this.gdbProcess?.kill();
 		this.terminalWriteEmitter.fire("\n\r\n\rGDB exited.\n\r");
 		vscode.commands.executeCommand('setContext', 'just-gdb.isDebugging', false);
@@ -214,14 +213,13 @@ class DebugSession {
 };
 
 
-let debugSession: DebugSession | null = null;
+let globalDebugSession: DebugSession | null = null;
 let contextViewProvider: ContextViewProvider | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
 
 	const commands: [string, any][] = [
-		['just-gdb.startGDB', COMMAND_startGDB],
-		['just-gdb.run', COMMAND_run],
+		['just-gdb.start', COMMAND_start],
 		['just-gdb.pause', COMMAND_pause],
 		['just-gdb.playground', COMMAND_playground],
 		['just-gdb.stepOver', COMMAND_stepOver],
@@ -237,7 +235,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const hoverProvider: vscode.HoverProvider = {
 		provideHover(document, position, token) {
-			if (debugSession === null) {
+			if (globalDebugSession === null) {
 				return;
 			}
 			const lineStr = document.lineAt(position.line).text;
@@ -256,8 +254,8 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 
 			return new Promise((resolve, reject) => {
-				debugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
-				debugSession?.packetListeners.push({
+				globalDebugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
+				globalDebugSession?.packetListeners.push({
 					receive(type, data) {
 						if (token.isCancellationRequested) {
 							return false;
@@ -289,14 +287,14 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.debug.breakpoints;
 
 	vscode.debug.onDidChangeBreakpoints(e => {
-		if (debugSession === null) {
+		if (globalDebugSession === null) {
 			return;
 		}
 		// Todo: Potentially interrupt the application to set breakpoints.
-		debugSession.executePythonFunction("set_breakpoints", {
+		globalDebugSession.executePythonFunction("set_breakpoints", {
 			vscode_breakpoints: e.added,
 		});
-		debugSession.executePythonFunction('remove_breakpoints', {
+		globalDebugSession.executePythonFunction('remove_breakpoints', {
 			vscode_breakpoints: e.removed,
 		});
 	});
@@ -334,10 +332,14 @@ function getAppConfig(workspaceFolder: vscode.WorkspaceFolder) {
 
 interface DebugPreset {
 	program: string;
+	runDirectly: boolean;
 }
 
-function COMMAND_startGDB() {
-	if (debugSession !== null) {
+
+
+async function COMMAND_start() {
+	if (globalDebugSession !== null) {
+		globalDebugSession.terminal.show();
 		vscode.window.showErrorMessage("GDB session is active already.");
 		return;
 	}
@@ -362,39 +364,53 @@ function COMMAND_startGDB() {
 	}
 	const debugPreset = debugPresets[0];
 	const program = debugPreset.program.replace("${workspaceFolder}", workspaceFolder.uri.fsPath);
-	debugSession = new DebugSession(gdbPath, [program], "GDB");
-	debugSession.terminal.show();
-}
+	const runDirectly = debugPreset.runDirectly;
 
-function COMMAND_run() {
-	if (debugSession === null) {
+	globalDebugSession = await new Promise<DebugSession>((resolve) => {
+		const newDebugSession = new DebugSession(gdbPath, [], 'gdb', () => { resolve(newDebugSession); });
+	});
+	if (globalDebugSession === null) {
 		return;
 	}
-	debugSession.forwardTextToGDB("run\n");
+
+	globalDebugSession.terminal.show();
+	if (vscode.debug.breakpoints.length > 0) {
+		globalDebugSession.executePythonFunction("set_breakpoints", {
+			vscode_breakpoints: vscode.debug.breakpoints
+		});
+	}
+
+	if (program.length > 0) {
+		globalDebugSession.sendCommandToTerminalAndGDB(`file ${program}`);
+		if (runDirectly) {
+			globalDebugSession.sendCommandToTerminalAndGDB('run');
+		}
+	}
 }
 
+
 function COMMAND_pause() {
-	debugSession?.interrupt();
+	globalDebugSession?.interrupt();
 }
 
 function COMMAND_stepOver() {
-	debugSession?.sendCommandToTerminalAndGDB("n");
+	globalDebugSession?.sendCommandToTerminalAndGDB("n");
 }
 
 function COMMAND_stepInto() {
-	debugSession?.sendCommandToTerminalAndGDB("s");
+	globalDebugSession?.sendCommandToTerminalAndGDB("s");
 }
 
 function COMMAND_stepOut() {
-	debugSession?.sendCommandToTerminalAndGDB("finish");
+	globalDebugSession?.sendCommandToTerminalAndGDB("finish");
 }
 
 function COMMAND_continue() {
-	debugSession?.sendCommandToTerminalAndGDB("c");
+	globalDebugSession?.sendCommandToTerminalAndGDB("c");
 }
 
 function COMMAND_loadBacktrace() {
-	debugSession?.packetListeners.push({
+	globalDebugSession?.packetListeners.push({
 		receive(type, data) {
 			if (type === 'backtrace') {
 				if (contextViewProvider !== null) {
@@ -406,7 +422,7 @@ function COMMAND_loadBacktrace() {
 			return true;
 		}
 	});
-	debugSession?.sendCommandToTerminalAndGDB("python request_backtrace()");
+	globalDebugSession?.sendCommandToTerminalAndGDB("python request_backtrace()");
 }
 
 // let currentLine = 1;
@@ -463,12 +479,13 @@ class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem>{
 			}
 			return items;
 		}
-
 	}
 };
 
 class ContextViewItem extends vscode.TreeItem {
 };
+
+
 
 class LoadBacktraceItem extends ContextViewItem {
 	constructor() {

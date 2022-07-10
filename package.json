@@ -10,20 +10,15 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:just-gdb.startGDB",
+		"onCommand:just-gdb.start",
 		"onCommand:just-gdb.playground"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "just-gdb.startGDB",
-				"title": "Start GDB",
-				"category": "Just GDB"
-			},
-			{
-				"command": "just-gdb.run",
-				"title": "Run Program",
+				"command": "just-gdb.start",
+				"title": "Start",
 				"category": "Just GDB"
 			},
 			{
@@ -115,6 +110,11 @@
 								"program": {
 									"type": "string",
 									"description": "Path to the program that should be debugged"
+								},
+								"runDirectly": {
+									"type": "boolean",
+									"description": "True when the program should start running when the debugger started. When false, 'run' has to be called from the terminal manually.",
+									"default": true
 								}
 							}
 						}
