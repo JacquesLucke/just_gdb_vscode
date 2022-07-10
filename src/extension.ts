@@ -85,7 +85,7 @@ class DebugSession {
 		this.gdbProcess.stderr?.on('data', this.onProcessStderr.bind(this));
 		this.gdbProcess.on('close', this.onProcessClose.bind(this));
 
-		this.sendInternalCommandToGDB("source " + gdbExtensionPath);
+		this.executeInternalCommandInGDB("source " + gdbExtensionPath);
 		this.startupFinished();
 	}
 
@@ -100,7 +100,7 @@ class DebugSession {
 		}
 		if (data.endsWith("\r")) { // Enter
 			this.terminalWriteEmitter.fire("\n\r");
-			this.sendUserCommandToGDB(this.currentTerminalLine);
+			this.executeUserCommandInGDB(this.currentTerminalLine);
 			this.currentTerminalLine = "";
 			return;
 		}
@@ -119,54 +119,69 @@ class DebugSession {
 	}
 
 	private onProcessStdout(data: Buffer) {
-		this.processOutputToTerminal(data);
 		const dataStr = data.toString();
-		this.tryDetectPackets(dataStr);
+		const internalDataTag = "##!@";
 
+		let remainingStr = dataStr;
+		let strForTerminal = "";
+
+		while (remainingStr.length > 0) {
+			const nextTagIndex = remainingStr.indexOf(internalDataTag);
+			if (nextTagIndex === -1) {
+				if (this.currentPacketStr === null) {
+					strForTerminal += remainingStr;
+					break;
+				}
+				else {
+					this.currentPacketStr += dataStr;
+					break;
+				}
+			}
+			else {
+				if (this.currentPacketStr === null) {
+					strForTerminal += remainingStr.slice(0, nextTagIndex);
+					remainingStr = remainingStr.slice(nextTagIndex + internalDataTag.length);
+					this.currentPacketStr = '';
+				}
+				else {
+					const packetStr = this.currentPacketStr + remainingStr.slice(0, nextTagIndex);
+					remainingStr = remainingStr.slice(nextTagIndex + internalDataTag.length);
+					this.processPacket(packetStr);
+					this.currentPacketStr = null;
+				}
+			}
+		}
+
+		if (strForTerminal.length > 0) {
+			const lines = strForTerminal.split('\n');
+			const lastLine = lines[lines.length - 1];
+			if (lastLine.length == 0) {
+				lines.pop();
+			}
+			for (let i = 0; i < lines.length - 1; i++) {
+				this.terminalWriteEmitter.fire(lines[i]);
+				this.terminalWriteEmitter.fire('\n\r');
+			}
+			this.terminalWriteEmitter.fire(lines[lines.length - 1]);
+			if (strForTerminal.endsWith('\n')) {
+				this.terminalWriteEmitter.fire('\n\r');
+			}
+		}
 	}
 
-	private tryDetectPackets(dataStr: string) {
-		const startTag = "##!@";
-		const endTag = [...startTag].reverse().join('');
-
-		if (this.currentPacketStr === null) {
-			const packetStart = dataStr.indexOf(startTag);
-			if (packetStart === -1) {
-				return;
-			}
-			const packetEnd = dataStr.indexOf(endTag, packetStart);
-			if (packetEnd === -1) {
-				this.currentPacketStr = dataStr.slice(packetStart);
-				return;
-			}
-			const packetStr = dataStr.slice(packetStart + startTag.length, packetEnd);
-			const packet = JSON.parse(packetStr);
-			this.processPacket(packet);
-			const remainingPacketStr = dataStr.slice(packetEnd + endTag.length);
-			this.tryDetectPackets(remainingPacketStr);
-			return;
-		}
-		const packetEnd = dataStr.indexOf(endTag);
-		if (packetEnd === -1) {
-			this.currentPacketStr += dataStr;
-			return;
-		}
-		const packetStr = this.currentPacketStr + dataStr.slice(0, packetEnd);
-		const packet = JSON.parse(packetStr);
-		this.processPacket(packet);
-		const remainingPacketStr = dataStr.slice(packetEnd + endTag.length);
-		this.tryDetectPackets(remainingPacketStr);
-	}
-
-	private processPacket(packet: PacketFromGDB) {
+	private processPacket(packetStr: string) {
+		const packet: PacketFromGDB = JSON.parse(packetStr);
 		const f = this.registeredCallablesByName.get(packet.functionName);
-		if (f !== undefined) {
-			f(packet.args);
+		if (f === undefined) {
+			console.log(`Cannot find function ${packet.functionName}`);
+			return;
 		}
+		f(packet.args);
 	}
 
 	private onProcessStderr(data: Buffer) {
-		this.processOutputToTerminal(data);
+		console.log(data.toString());
+		this.terminalWriteEmitter.fire(data.toString());
 	}
 	private onProcessClose() {
 		globalDebugSession = null;
@@ -175,35 +190,24 @@ class DebugSession {
 		vscode.commands.executeCommand('setContext', 'just-gdb.isDebugging', false);
 	}
 
-	private processOutputToTerminal(data: Buffer) {
-		const data_str = data.toString();
-		// Todo: Figure out why just replacing \n with \n\r did not work correctly.
-		const lines = data_str.split("\n");
-		for (let i = 0; i < lines.length - 1; i++) {
-			this.terminalWriteEmitter.fire(lines[i] + "\n\r");
-		}
-		this.terminalWriteEmitter.fire(lines[lines.length - 1]);
-		if (data_str.endsWith("\n")) {
-			this.terminalWriteEmitter.fire("\n\r");
-		}
-	}
-
-	executePythonFunction(functionName: string, args: object) {
+	executePythonFunctionInGDB(functionName: string, args: object) {
 		const argsStr = JSON.stringify(args);
 		const argsBase64 = Buffer.from(argsStr).toString('base64');
-		this.sendInternalCommandToGDB(`python invoke_function_from_vscode("${functionName}", "${argsBase64}")`);
+		this.forwardCommandToGDB(`python invoke_function_from_vscode("${functionName}", "${argsBase64}")`);
+		this.terminalWriteEmitter.fire(`Internal Python Call: ${functionName}\n\r`);
 	}
 
-	forwardTextToGDB(text: string) {
-		this.gdbProcess?.stdin?.write(text);
+	executeInternalCommandInGDB(command: string) {
+		this.forwardCommandToGDB(command);
+		this.terminalWriteEmitter.fire(`Internal Command: ${command}\n\r`);
 	}
 
-	sendInternalCommandToGDB(command: string) {
+	executeUserCommandInGDB(command: string) {
+		this.forwardCommandToGDB(command);
+	}
+
+	forwardCommandToGDB(command: string) {
 		this.gdbProcess?.stdin?.write(command + '\n')
-	}
-
-	sendUserCommandToGDB(command: string) {
-		this.gdbProcess?.stdin?.write(command + '\n');
 	}
 
 	interrupt() {
@@ -319,7 +323,7 @@ export function activate(context: vscode.ExtensionContext) {
 						hoverReject();
 					}
 				});
-				globalDebugSession?.sendInternalCommandToGDB("python request_hover_value(\"" + expression + "\")")
+				globalDebugSession?.executeInternalCommandInGDB("python request_hover_value(\"" + expression + "\")")
 			});
 		}
 	};
@@ -338,10 +342,10 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		// Todo: Potentially interrupt the application to set breakpoints.
-		globalDebugSession.executePythonFunction("set_breakpoints", {
+		globalDebugSession.executePythonFunctionInGDB("set_breakpoints", {
 			vscode_breakpoints: e.added,
 		});
-		globalDebugSession.executePythonFunction('remove_breakpoints', {
+		globalDebugSession.executePythonFunctionInGDB('remove_breakpoints', {
 			vscode_breakpoints: e.removed,
 		});
 	});
@@ -420,15 +424,15 @@ async function COMMAND_start() {
 
 	globalDebugSession.terminal.show();
 	if (vscode.debug.breakpoints.length > 0) {
-		globalDebugSession.executePythonFunction("set_breakpoints", {
+		globalDebugSession.executePythonFunctionInGDB("set_breakpoints", {
 			vscode_breakpoints: vscode.debug.breakpoints
 		});
 	}
 
 	if (program.length > 0) {
-		globalDebugSession.sendInternalCommandToGDB(`file ${program}`);
+		globalDebugSession.executeInternalCommandInGDB(`file ${program}`);
 		if (runDirectly) {
-			globalDebugSession.sendInternalCommandToGDB('run');
+			globalDebugSession.executeInternalCommandInGDB('run');
 		}
 	}
 }
@@ -439,23 +443,23 @@ function COMMAND_pause() {
 }
 
 function COMMAND_stepOver() {
-	globalDebugSession?.sendInternalCommandToGDB("n");
+	globalDebugSession?.executeInternalCommandInGDB("n");
 }
 
 function COMMAND_stepInto() {
-	globalDebugSession?.sendInternalCommandToGDB("s");
+	globalDebugSession?.executeInternalCommandInGDB("s");
 }
 
 function COMMAND_stepOut() {
-	globalDebugSession?.sendInternalCommandToGDB("finish");
+	globalDebugSession?.executeInternalCommandInGDB("finish");
 }
 
 function COMMAND_continue() {
-	globalDebugSession?.sendInternalCommandToGDB("c");
+	globalDebugSession?.executeInternalCommandInGDB("c");
 }
 
 function COMMAND_loadBacktrace() {
-	globalDebugSession?.sendInternalCommandToGDB("python request_backtrace()");
+	globalDebugSession?.executeInternalCommandInGDB("python request_backtrace()");
 }
 
 // let currentLine = 1;

@@ -2,12 +2,11 @@ import json
 import base64
 import functools
 
-start_tag = "##!@"
-end_tag = start_tag[::-1]
+internal_data_tag = "##!@"
 
 def send_data_to_vscode(data: object):
-  data_to_send = start_tag + json.dumps(data) + end_tag
-  print(data_to_send)
+  data_to_send = internal_data_tag + json.dumps(data) + internal_data_tag
+  print(data_to_send, end='', flush=True)
 
 def invoke_vscode_function(name: str, **kwargs):
   send_data_to_vscode({
