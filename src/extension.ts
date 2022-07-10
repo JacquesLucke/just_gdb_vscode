@@ -85,7 +85,7 @@ class DebugSession {
 		this.gdbProcess.stderr?.on('data', this.onProcessStderr.bind(this));
 		this.gdbProcess.on('close', this.onProcessClose.bind(this));
 
-		this.sendCommandToTerminalAndGDB("source " + gdbExtensionPath);
+		this.sendInternalCommandToGDB("source " + gdbExtensionPath);
 		this.startupFinished();
 	}
 
@@ -100,7 +100,7 @@ class DebugSession {
 		}
 		if (data.endsWith("\r")) { // Enter
 			this.terminalWriteEmitter.fire("\n\r");
-			this.forwardTextToGDB(this.currentTerminalLine + "\n");
+			this.sendUserCommandToGDB(this.currentTerminalLine);
 			this.currentTerminalLine = "";
 			return;
 		}
@@ -111,10 +111,7 @@ class DebugSession {
 			return;
 		}
 		if (data === '\t') { // Tab
-			// Auto-complete is not quite working yet.
-			this.forwardTextToGDB(this.currentTerminalLine);
-			this.forwardTextToGDB('\t');
-			this.terminalWriteEmitter.fire('\n\r');
+			// Auto-complete is not quite working yet, ignore for now.
 			return;
 		}
 		this.currentTerminalLine += data;
@@ -194,16 +191,19 @@ class DebugSession {
 	executePythonFunction(functionName: string, args: object) {
 		const argsStr = JSON.stringify(args);
 		const argsBase64 = Buffer.from(argsStr).toString('base64');
-		this.sendCommandToTerminalAndGDB(`python invoke_function_from_vscode("${functionName}", "${argsBase64}")`);
-	}
-
-	sendCommandToTerminalAndGDB(command: string) {
-		this.terminalWriteEmitter.fire(command + "\n\r");
-		this.forwardTextToGDB(command + "\n");
+		this.sendInternalCommandToGDB(`python invoke_function_from_vscode("${functionName}", "${argsBase64}")`);
 	}
 
 	forwardTextToGDB(text: string) {
 		this.gdbProcess?.stdin?.write(text);
+	}
+
+	sendInternalCommandToGDB(command: string) {
+		this.gdbProcess?.stdin?.write(command + '\n')
+	}
+
+	sendUserCommandToGDB(command: string) {
+		this.gdbProcess?.stdin?.write(command + '\n');
 	}
 
 	interrupt() {
@@ -319,7 +319,7 @@ export function activate(context: vscode.ExtensionContext) {
 						hoverReject();
 					}
 				});
-				globalDebugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
+				globalDebugSession?.sendInternalCommandToGDB("python request_hover_value(\"" + expression + "\")")
 			});
 		}
 	};
@@ -426,9 +426,9 @@ async function COMMAND_start() {
 	}
 
 	if (program.length > 0) {
-		globalDebugSession.sendCommandToTerminalAndGDB(`file ${program}`);
+		globalDebugSession.sendInternalCommandToGDB(`file ${program}`);
 		if (runDirectly) {
-			globalDebugSession.sendCommandToTerminalAndGDB('run');
+			globalDebugSession.sendInternalCommandToGDB('run');
 		}
 	}
 }
@@ -439,23 +439,23 @@ function COMMAND_pause() {
 }
 
 function COMMAND_stepOver() {
-	globalDebugSession?.sendCommandToTerminalAndGDB("n");
+	globalDebugSession?.sendInternalCommandToGDB("n");
 }
 
 function COMMAND_stepInto() {
-	globalDebugSession?.sendCommandToTerminalAndGDB("s");
+	globalDebugSession?.sendInternalCommandToGDB("s");
 }
 
 function COMMAND_stepOut() {
-	globalDebugSession?.sendCommandToTerminalAndGDB("finish");
+	globalDebugSession?.sendInternalCommandToGDB("finish");
 }
 
 function COMMAND_continue() {
-	globalDebugSession?.sendCommandToTerminalAndGDB("c");
+	globalDebugSession?.sendInternalCommandToGDB("c");
 }
 
 function COMMAND_loadBacktrace() {
-	globalDebugSession?.sendCommandToTerminalAndGDB("python request_backtrace()");
+	globalDebugSession?.sendInternalCommandToGDB("python request_backtrace()");
 }
 
 // let currentLine = 1;
