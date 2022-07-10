@@ -277,9 +277,6 @@ class DebugSession {
   currentPositionRequestFinished(args: CurrentPositionRequestFinishedArgs) {
     let filePath: string = args.filePath;
     const line: number = args.line;
-    if (filePath == "main.cc") {
-      filePath = "/home/jacques/Documents/test_c_debug/main.cc";
-    }
     vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
       const range = new vscode.Range(line, 0, line, 100000);
       const decorationType = args.isNewestFrame
