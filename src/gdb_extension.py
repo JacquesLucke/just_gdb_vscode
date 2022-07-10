@@ -9,6 +9,12 @@ def send_data_to_vscode(data: object):
   data_to_send = start_tag + json.dumps(data) + end_tag
   print(data_to_send)
 
+def invoke_vscode_function(name: str, **kwargs):
+  send_data_to_vscode({
+    "functionName": name,
+    "args": kwargs,
+  })
+
 def handle_stop(event):
   file_names = []
   frame = gdb.newest_frame()
@@ -16,11 +22,10 @@ def handle_stop(event):
     if sal := frame.find_sal():
       if symtab := sal.symtab:
         if filename := symtab.filename:
-          send_data_to_vscode({
-            "type": "current_position",
-            "file_path": filename,
-            "line": sal.line - 1,
-          })
+          invoke_vscode_function(
+            "handleStopEvent",
+            filePath=filename,
+            line=sal.line - 1)
           return
     frame = frame.older()
 
@@ -28,9 +33,9 @@ gdb.events.stop.connect(handle_stop)
 
 
 def handle_continue(event):
-  send_data_to_vscode({
-    "type": "continue",
-  })
+  invoke_vscode_function(
+    "handleContinueEvent",
+  )
 
 gdb.events.cont.connect(handle_continue)
 
@@ -38,17 +43,17 @@ def request_hover_value(expression: str):
   try:
     value = gdb.parse_and_eval(expression)
   except:
-    send_data_to_vscode({
-      "type": "hover_value_fail",
-      "expression": expression,
-    })
+    invoke_vscode_function(
+      "hoverRequestFailed",
+      expression=expression,
+    )
     return
   value_str = str(value)
-  send_data_to_vscode({
-    "type": "hover_value",
-    "expression": expression,
-    "value": value_str,
-  })
+  invoke_vscode_function(
+    "hoverRequestFinished",
+    expression=expression,
+    value=value_str
+  )
 
 def request_backtrace():
   frame = gdb.newest_frame()
@@ -56,12 +61,12 @@ def request_backtrace():
   while frame is not None:
     frames.append(str(frame.function()))
     frame = frame.older()
-  send_data_to_vscode({
-    "type": "backtrace",
-    "frames": frames,
-  })
+  invoke_vscode_function(
+    "backtraceRequestFinished",
+    frames=frames,
+  )
 
-def execute_function(function_name: str, kwargs_base64: str):
+def invoke_function_from_vscode(function_name: str, kwargs_base64: str):
   kwargs_str = base64.b64decode(kwargs_base64)
   kwargs = json.loads(kwargs_str)
   f = registered_callables_by_name[function_name]

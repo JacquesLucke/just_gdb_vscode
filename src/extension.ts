@@ -8,8 +8,33 @@ const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
 	rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
 });
 
-interface PacketListener {
-	receive(type: string, data: any): boolean;
+interface PacketFromGDB {
+	functionName: string,
+	args: object,
+};
+
+interface HandleStopEventArgs {
+	filePath: string,
+	line: number,
+};
+
+interface BacktraceRequestFinishedArgs {
+	frames: string[];
+};
+
+interface HoverRequestFinishedArgs {
+	expression: string,
+	value: string,
+};
+
+interface HoverRequestFailedArgs {
+	expression: string,
+};
+
+interface HoverRequestInfo {
+	expression: string,
+	resolve: (value: string) => void;
+	reject: () => void;
 };
 
 class DebugSession {
@@ -21,7 +46,8 @@ class DebugSession {
 	startupFinished: () => void;
 	private currentTerminalLine: string = "";
 	private currentPacketStr: string | null = null;
-	packetListeners: PacketListener[];
+	registeredCallablesByName = new Map<string, (args: object) => void>();
+	pendingHoverRequests: HoverRequestInfo[] = [];
 
 	constructor(gdbBinaryPath: string, args: string[], terminalName: string, startupFinished: () => void) {
 		this.gdbBinaryPath = gdbBinaryPath;
@@ -39,38 +65,16 @@ class DebugSession {
 		});
 		vscode.commands.executeCommand('setContext', 'just-gdb.isDebugging', true);
 
-		this.packetListeners = [];
-		this.packetListeners.push({
-			receive(type, data) {
-				if (type == 'continue') {
-					vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
-					if (contextViewProvider) {
-						contextViewProvider.stackFrames = [];
-						contextViewProvider.refresh();
-					}
-				}
-				return true;
-			},
-		});
-		this.packetListeners.push({
-			receive(type, data) {
-				if (type == 'current_position') {
-					let filePath: string = data['file_path'];
-					const line: number = data['line'];
-					if (filePath == 'main.cc') {
-						filePath = '/home/jacques/Documents/test_c_debug/main.cc';
-					}
-					vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
-						const range = new vscode.Range(line, 0, line, 100000);
-						editor.setDecorations(currentLineDecorationType, [range]);
-						editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-						// Would be nice to move the vscode window to the front here, but there does
-						// not seem to be an API for that.
-					});
-				}
-				return true;
-			},
-		});
+		const callables = [
+			this.handleContinueEvent,
+			this.handleStopEvent,
+			this.hoverRequestFinished,
+			this.hoverRequestFailed,
+			this.backtraceRequestFinished,
+		];
+		for (const callable of callables) {
+			this.registeredCallablesByName.set(callable.name, callable.bind(this));
+		}
 	}
 
 	private onTerminalOpen() {
@@ -157,16 +161,11 @@ class DebugSession {
 		this.tryDetectPackets(remainingPacketStr);
 	}
 
-	private processPacket(packet: any) {
-		const packetType = packet['type'];
-
-		const nextListeners = [];
-		for (const listener of this.packetListeners) {
-			if (listener.receive(packetType, packet)) {
-				nextListeners.push(listener);
-			}
+	private processPacket(packet: PacketFromGDB) {
+		const f = this.registeredCallablesByName.get(packet.functionName);
+		if (f !== undefined) {
+			f(packet.args);
 		}
-		this.packetListeners = nextListeners;
 	}
 
 	private onProcessStderr(data: Buffer) {
@@ -195,7 +194,7 @@ class DebugSession {
 	executePythonFunction(functionName: string, args: object) {
 		const argsStr = JSON.stringify(args);
 		const argsBase64 = Buffer.from(argsStr).toString('base64');
-		this.sendCommandToTerminalAndGDB(`python execute_function("${functionName}", "${argsBase64}")`);
+		this.sendCommandToTerminalAndGDB(`python invoke_function_from_vscode("${functionName}", "${argsBase64}")`);
 	}
 
 	sendCommandToTerminalAndGDB(command: string) {
@@ -209,6 +208,63 @@ class DebugSession {
 
 	interrupt() {
 		this.gdbProcess?.kill('SIGINT');
+	}
+
+	handleContinueEvent(args: any) {
+		vscode.window.activeTextEditor?.setDecorations(currentLineDecorationType, []);
+		if (contextViewProvider) {
+			contextViewProvider.stackFrames = [];
+			contextViewProvider.refresh();
+		}
+	}
+
+	handleStopEvent(args: HandleStopEventArgs) {
+		let filePath: string = args.filePath;
+		const line: number = args.line;
+		if (filePath == 'main.cc') {
+			filePath = '/home/jacques/Documents/test_c_debug/main.cc';
+		}
+		vscode.window.showTextDocument(vscode.Uri.file(filePath)).then((editor) => {
+			const range = new vscode.Range(line, 0, line, 100000);
+			editor.setDecorations(currentLineDecorationType, [range]);
+			editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+			// Would be nice to move the vscode window to the front here, but there does
+			// not seem to be an API for that.
+		});
+	}
+
+	hoverRequestFinished(args: HoverRequestFinishedArgs) {
+		const remainingRequests = [];
+		for (const request of this.pendingHoverRequests) {
+			if (request.expression == args.expression) {
+				request.resolve(args.value);
+			}
+			else {
+				remainingRequests.push(request);
+			}
+		}
+		this.pendingHoverRequests = remainingRequests;
+	}
+
+	hoverRequestFailed(args: HoverRequestFailedArgs) {
+		const remainingRequests = [];
+		for (const request of this.pendingHoverRequests) {
+			if (request.expression == args.expression) {
+				request.reject();
+			}
+			else {
+				remainingRequests.push(request);
+			}
+		}
+		this.pendingHoverRequests = remainingRequests;
+	}
+
+	backtraceRequestFinished(args: BacktraceRequestFinishedArgs) {
+		if (contextViewProvider !== null) {
+			contextViewProvider.stackFrames = args.frames;
+			contextViewProvider.refresh();
+			return false;
+		}
 	}
 };
 
@@ -253,26 +309,17 @@ export function activate(context: vscode.ExtensionContext) {
 				return undefined;
 			}
 
-			return new Promise((resolve, reject) => {
-				globalDebugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
-				globalDebugSession?.packetListeners.push({
-					receive(type, data) {
-						if (token.isCancellationRequested) {
-							return false;
-						}
-						if (type == 'hover_value') {
-							if (data['expression'] == expression) {
-								resolve(new vscode.Hover(data['value']));
-								return false;
-							}
-						}
-						if (type == 'hover_value_fail') {
-							reject();
-							return false;
-						}
-						return true;
+			return new Promise((hoverRresolve, hoverReject) => {
+				globalDebugSession?.pendingHoverRequests.push({
+					expression: expression,
+					resolve: (value: string) => {
+						hoverRresolve(new vscode.Hover(value));
 					},
+					reject: () => {
+						hoverReject();
+					}
 				});
+				globalDebugSession?.sendCommandToTerminalAndGDB("python request_hover_value(\"" + expression + "\")")
 			});
 		}
 	};
@@ -408,18 +455,6 @@ function COMMAND_continue() {
 }
 
 function COMMAND_loadBacktrace() {
-	globalDebugSession?.packetListeners.push({
-		receive(type, data) {
-			if (type === 'backtrace') {
-				if (contextViewProvider !== null) {
-					contextViewProvider.stackFrames = data['frames'];
-					contextViewProvider.refresh();
-					return false;
-				}
-			}
-			return true;
-		}
-	});
 	globalDebugSession?.sendCommandToTerminalAndGDB("python request_backtrace()");
 }
 
