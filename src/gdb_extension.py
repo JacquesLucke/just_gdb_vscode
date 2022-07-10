@@ -1,5 +1,6 @@
 import json
 import base64
+import functools
 
 start_tag = "##!@"
 end_tag = start_tag[::-1]
@@ -63,9 +64,16 @@ def request_backtrace():
 def execute_function(function_name: str, kwargs_base64: str):
   kwargs_str = base64.b64decode(kwargs_base64)
   kwargs = json.loads(kwargs_str)
-  f = allowed_functions_by_name[function_name]
+  f = registered_callables_by_name[function_name]
   f(**kwargs)
 
+registered_callables_by_name = {}
+
+def vscode_callable(func):
+  registered_callables_by_name[func.__name__] = func
+  return func
+
+@vscode_callable
 def set_breakpoints(vscode_breakpoints):
   for vscode_breakpoint in vscode_breakpoints:
     if 'location' in vscode_breakpoint:
@@ -73,6 +81,7 @@ def set_breakpoints(vscode_breakpoints):
       line = vscode_breakpoint['location']['range'][0]['line'] + 1
       gdb.Breakpoint(source=path, line=line)
 
+@vscode_callable
 def remove_breakpoints(vscode_breakpoints):
   for vscode_breakpoint in vscode_breakpoints:
     if 'location' in vscode_breakpoint:
@@ -82,10 +91,3 @@ def remove_breakpoints(vscode_breakpoints):
       for breakpoint in gdb.breakpoints():
         if breakpoint.location == location_str:
           breakpoint.delete()
-
-
-allowed_function_list = [
-  set_breakpoints,
-  remove_breakpoints,
-]
-allowed_functions_by_name = {f.__name__ : f for f in allowed_function_list}

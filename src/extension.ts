@@ -335,8 +335,6 @@ interface DebugPreset {
 	runDirectly: boolean;
 }
 
-
-
 async function COMMAND_start() {
 	if (globalDebugSession !== null) {
 		globalDebugSession.terminal.show();
