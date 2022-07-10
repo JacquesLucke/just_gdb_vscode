@@ -363,6 +363,7 @@ export function activate(context: vscode.ExtensionContext) {
     ["just-gdb.stepOut", COMMAND_stepOut],
     ["just-gdb.continue", COMMAND_continue],
     ["just-gdb.loadSelectedContext", COMMAND_loadSelectedContext],
+    ["just-gdb.checkForMoreThreads", COMMAND_checkForMoreThreads],
   ];
 
   for (const item of commands) {
@@ -558,6 +559,15 @@ function COMMAND_loadSelectedContext() {
   );
 }
 
+function COMMAND_checkForMoreThreads(inferiorID: number) {
+  globalDebugSession?.executePythonFunctionInGDB(
+    "request_all_threads_in_inferior",
+    {
+      inferior_id: inferiorID,
+    }
+  );
+}
+
 // let currentLine = 1;
 
 // const currentLineDecorationType = vscode.window.createTextEditorDecorationType({
@@ -678,6 +688,7 @@ class ContextViewProvider implements vscode.TreeDataProvider<ContextViewItem> {
     if (element) {
       if (element instanceof ContextInferiorItem) {
         const items = [];
+        items.push(new LoadThreadsInInferiorContextItem(element.inferior));
         for (const thread of element.inferior.threads.values()) {
           items.push(new ContextThreadItem(thread));
         }
@@ -725,8 +736,19 @@ class LoadSelectedContextItem extends ContextViewItem {
   constructor() {
     super("Load Selected");
     this.command = {
-      title: "Load Selected Context",
+      title: "Load selected context",
       command: "just-gdb.loadSelectedContext",
+    };
+  }
+}
+
+class LoadThreadsInInferiorContextItem extends ContextViewItem {
+  constructor(inferior: InferiorContextCache) {
+    super("Check for more threads");
+    this.command = {
+      title: "Check for more threads",
+      command: "just-gdb.checkForMoreThreads",
+      arguments: [inferior.inferiorID],
     };
   }
 }

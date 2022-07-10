@@ -87,18 +87,15 @@ def request_hover_value(expression: str):
     )
 
 
-@vscode_callable
-def request_backtrace_for_current_thread():
-    thread = gdb.selected_thread()
-    frame = gdb.newest_frame()
-    inferior = thread.inferior
-
+def send_found_inferior(inferior):
     invoke_vscode_function(
         "foundInferiorContext",
         inferiorID=inferior.num,
         inferiorName=inferior.progspace.filename,
     )
 
+
+def send_found_thread(inferior, thread):
     invoke_vscode_function(
         "foundThreadContext",
         inferiorID=inferior.num,
@@ -106,17 +103,42 @@ def request_backtrace_for_current_thread():
         threadName="<no name>" if thread.name is None else thread.name,
     )
 
-    level = 0
+
+def send_found_frame(inferior, thread, frame):
+    invoke_vscode_function(
+        "foundFrameContext",
+        inferiorID=inferior.num,
+        globalThreadID=thread.global_num,
+        functionName=str(frame.function()),
+        level=frame.level(),
+    )
+
+
+@vscode_callable
+def request_backtrace_for_current_thread():
+    thread = gdb.selected_thread()
+    frame = gdb.newest_frame()
+    inferior = thread.inferior
+
+    send_found_inferior(inferior)
+    send_found_thread(inferior, thread)
+
     while frame is not None:
-        invoke_vscode_function(
-            "foundFrameContext",
-            inferiorID=inferior.num,
-            globalThreadID=thread.global_num,
-            functionName=str(frame.function()),
-            level=level,
-        )
-        level += 1
+        send_found_frame(inferior, thread, frame)
         frame = frame.older()
+
+
+@vscode_callable
+def request_all_threads_in_inferior(inferior_id: int):
+    for inferior in gdb.inferiors():
+        if inferior.num == inferior_id:
+            break
+    else:
+        return
+
+    send_found_inferior(inferior)
+    for thread in inferior.threads():
+        send_found_thread(inferior, thread)
 
 
 @vscode_callable

@@ -55,6 +55,11 @@
 				"command": "just-gdb.loadSelectedContext",
 				"title": "Load Backtrace",
 				"category": "Just GDB"
+			},
+			{
+				"command": "just-gdb.checkForMoreThreads",
+				"title": "Check for more Threads",
+				"category": "Just GDB"
 			}
 		],
 		"views": {
