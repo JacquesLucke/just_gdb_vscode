@@ -20,16 +20,7 @@ def invoke_vscode_function(name: str, **kwargs):
 
 
 def handle_stop(event):
-    frame = gdb.newest_frame()
-    while frame is not None:
-        if sal := frame.find_sal():
-            if symtab := sal.symtab:
-                if filename := symtab.filename:
-                    invoke_vscode_function(
-                        "handleStopEvent", filePath=filename, line=sal.line - 1
-                    )
-                    return
-        frame = frame.older()
+    invoke_vscode_function("handleStopEvent")
 
 
 gdb.events.stop.connect(handle_stop)
@@ -107,3 +98,19 @@ def request_backtrace():
         "backtraceRequestFinished",
         frames=frames,
     )
+
+
+@vscode_callable
+def request_current_position():
+    frame = gdb.newest_frame()
+    while frame is not None:
+        if sal := frame.find_sal():
+            if symtab := sal.symtab:
+                if filename := symtab.filename:
+                    invoke_vscode_function(
+                        "currentPositionRequestFinished",
+                        filePath=filename,
+                        line=sal.line - 1,
+                    )
+                    return
+        frame = frame.older()

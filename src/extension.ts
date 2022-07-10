@@ -15,7 +15,9 @@ interface PacketFromGDB {
   args: object;
 }
 
-interface HandleStopEventArgs {
+interface HandleStopEventArgs {}
+
+interface CurrentPositionRequestFinishedArgs {
   filePath: string;
   line: number;
 }
@@ -78,6 +80,7 @@ class DebugSession {
       this.hoverRequestFinished,
       this.hoverRequestFailed,
       this.backtraceRequestFinished,
+      this.currentPositionRequestFinished,
     ];
     for (const callable of callables) {
       this.registeredCallablesByName.set(callable.name, callable.bind(this));
@@ -241,6 +244,10 @@ class DebugSession {
   }
 
   handleStopEvent(args: HandleStopEventArgs) {
+    this.executePythonFunctionInGDB("request_current_position", {});
+  }
+
+  currentPositionRequestFinished(args: CurrentPositionRequestFinishedArgs) {
     let filePath: string = args.filePath;
     const line: number = args.line;
     if (filePath == "main.cc") {
