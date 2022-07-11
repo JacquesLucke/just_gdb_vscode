@@ -23,7 +23,8 @@ def handle_stop(event):
     invoke_vscode_function("handleStopEvent")
 
 
-gdb.events.stop.connect(handle_stop)
+def handle_exited(event):
+    invoke_vscode_function("handleExitedEvent")
 
 
 def handle_continue(event):
@@ -32,6 +33,8 @@ def handle_continue(event):
     )
 
 
+gdb.events.stop.connect(handle_stop)
+gdb.events.exited.connect(handle_exited)
 gdb.events.cont.connect(handle_continue)
 
 

@@ -85,22 +85,22 @@
 			{
 				"command": "just-gdb.stepOver",
 				"key": "F10",
-				"when": "just-gdb.isDebugging"
+				"when": "just-gdb.gdbAcceptsInput"
 			},
 			{
 				"command": "just-gdb.stepInto",
 				"key": "F11",
-				"when": "just-gdb.isDebugging"
+				"when": "just-gdb.gdbAcceptsInput"
 			},
 			{
 				"command": "just-gdb.stepOut",
 				"key": "shift+F11",
-				"when": "just-gdb.isDebugging"
+				"when": "just-gdb.gdbAcceptsInput"
 			},
 			{
 				"command": "just-gdb.continue",
 				"key": "F5",
-				"when": "just-gdb.isDebugging"
+				"when": "just-gdb.gdbAcceptsInput"
 			}
 		],
 		"configuration": [

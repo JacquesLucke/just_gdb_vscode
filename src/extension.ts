@@ -25,6 +25,8 @@ interface PacketFromGDB {
 
 interface HandleStopEventArgs {}
 
+interface HandleExitedEventArgs {}
+
 interface CurrentPositionRequestFailedArgs {}
 
 interface CurrentPositionRequestFinishedArgs {
@@ -77,6 +79,7 @@ class DebugSession {
   private currentPacketStr: string | null = null;
   registeredCallablesByName = new Map<string, (args: object) => void>();
   pendingHoverRequests: HoverRequestInfo[] = [];
+  gdbAcceptsInputs: boolean = false;
 
   constructor(
     gdbBinaryPath: string,
@@ -84,7 +87,6 @@ class DebugSession {
     terminalName: string,
     startupFinished: () => void
   ) {
-    vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", true);
     this.gdbBinaryPath = gdbBinaryPath;
     this.gdbArgs = args;
     this.startupFinished = startupFinished;
@@ -102,6 +104,7 @@ class DebugSession {
     const callables = [
       this.handleContinueEvent,
       this.handleStopEvent,
+      this.handleExitedEvent,
       this.hoverRequestFinished,
       this.hoverRequestFailed,
       this.foundInferiorContext,
@@ -123,6 +126,7 @@ class DebugSession {
     this.gdbProcess.stderr?.on("data", this.onProcessStderr.bind(this));
     this.gdbProcess.on("close", this.onProcessClose.bind(this));
 
+    this.updateGDBAcceptsInput(true);
     this.executeInternalCommandInGDB("source " + gdbExtensionPath);
     this.startupFinished();
   }
@@ -130,7 +134,7 @@ class DebugSession {
   private cleanupAfterSession() {
     this.clearLineDecorations();
     this.resetContextView();
-    vscode.commands.executeCommand("setContext", "just-gdb.isDebugging", false);
+    this.updateGDBAcceptsInput(false);
   }
 
   private onTerminalClose() {
@@ -142,6 +146,9 @@ class DebugSession {
     if (data.charCodeAt(0) == 3) {
       // Ctrl+C
       this.interrupt();
+      return;
+    }
+    if (!this.gdbAcceptsInputs) {
       return;
     }
     if (data.endsWith("\r")) {
@@ -284,10 +291,25 @@ class DebugSession {
   handleContinueEvent(args: any) {
     this.clearLineDecorations();
     this.resetContextView();
+    this.updateGDBAcceptsInput(false);
   }
 
   handleStopEvent(args: HandleStopEventArgs) {
+    this.updateGDBAcceptsInput(true);
     this.executePythonFunctionInGDB("request_current_position", {});
+  }
+
+  handleExitedEvent(args: HandleExitedEventArgs) {
+    this.updateGDBAcceptsInput(true);
+  }
+
+  updateGDBAcceptsInput(acceptsInput: boolean) {
+    this.gdbAcceptsInputs = acceptsInput;
+    vscode.commands.executeCommand(
+      "setContext",
+      "just-gdb.gdbAcceptsInput",
+      acceptsInput
+    );
   }
 
   currentPositionRequestFinished(args: CurrentPositionRequestFinishedArgs) {
@@ -376,6 +398,9 @@ export function activate(context: vscode.ExtensionContext) {
   const hoverProvider: vscode.HoverProvider = {
     provideHover(document, position, token) {
       if (globalDebugSession === null) {
+        return;
+      }
+      if (!globalDebugSession.gdbAcceptsInputs) {
         return;
       }
       const lineStr = document.lineAt(position.line).text;
@@ -528,6 +553,7 @@ async function COMMAND_start() {
   }
   if (programIsSet && runDirectly) {
     globalDebugSession.executeInternalCommandInGDB("run");
+    globalDebugSession.updateGDBAcceptsInput(false);
   }
 
   contextViewProvider?.refresh();
@@ -538,42 +564,56 @@ function COMMAND_pause() {
 }
 
 function COMMAND_stepOver() {
-  globalDebugSession?.executeInternalCommandInGDB("n");
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executeInternalCommandInGDB("n");
+  }
 }
 
 function COMMAND_stepInto() {
-  globalDebugSession?.executeInternalCommandInGDB("s");
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executeInternalCommandInGDB("s");
+  }
 }
 
 function COMMAND_stepOut() {
-  globalDebugSession?.executeInternalCommandInGDB("finish");
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executeInternalCommandInGDB("finish");
+  }
 }
 
 function COMMAND_continue() {
-  globalDebugSession?.executeInternalCommandInGDB("c");
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executeInternalCommandInGDB("c");
+  }
 }
 
 function COMMAND_loadSelectedContext() {
-  globalDebugSession?.executePythonFunctionInGDB(
-    "request_backtrace_for_current_thread",
-    {}
-  );
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executePythonFunctionInGDB(
+      "request_backtrace_for_current_thread",
+      {}
+    );
+  }
 }
 
 function COMMAND_checkForMoreThreads(inferiorID: number) {
-  globalDebugSession?.executePythonFunctionInGDB(
-    "request_all_threads_in_inferior",
-    {
-      inferior_id: inferiorID,
-    }
-  );
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executePythonFunctionInGDB(
+      "request_all_threads_in_inferior",
+      {
+        inferior_id: inferiorID,
+      }
+    );
+  }
 }
 
 function COMMAND_loadAllAvailableContexts() {
-  globalDebugSession?.executePythonFunctionInGDB(
-    "request_all_available_contexts",
-    {}
-  );
+  if (globalDebugSession?.gdbAcceptsInputs) {
+    globalDebugSession.executePythonFunctionInGDB(
+      "request_all_available_contexts",
+      {}
+    );
+  }
 }
 
 // let currentLine = 1;
