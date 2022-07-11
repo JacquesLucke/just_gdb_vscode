@@ -29,6 +29,10 @@ interface HandleExitedEventArgs {}
 
 interface CurrentPositionRequestFailedArgs {}
 
+interface SyncIOEchoArgs {
+  id: number;
+}
+
 interface CurrentPositionRequestFinishedArgs {
   isNewestFrame: boolean;
   filePath: string;
@@ -62,6 +66,8 @@ interface HoverRequestFailedArgs {
   expression: string;
 }
 
+let syncIOCounter = 0;
+
 interface HoverRequestInfo {
   expression: string;
   resolve: (value: string) => void;
@@ -80,6 +86,8 @@ class DebugSession {
   registeredCallablesByName = new Map<string, (args: object) => void>();
   pendingHoverRequests: HoverRequestInfo[] = [];
   gdbAcceptsInputs: boolean = false;
+  waitingSyncs = new Map<number, () => void>();
+  isTemporaryInterrupt = false;
 
   constructor(
     gdbBinaryPath: string,
@@ -112,6 +120,7 @@ class DebugSession {
       this.foundFrameContext,
       this.currentPositionRequestFinished,
       this.currentPositionRequestFailed,
+      this.syncIOEcho,
     ];
     for (const callable of callables) {
       this.registeredCallablesByName.set(callable.name, callable.bind(this));
@@ -296,7 +305,9 @@ class DebugSession {
 
   handleStopEvent(args: HandleStopEventArgs) {
     this.updateGDBAcceptsInput(true);
-    this.executePythonFunctionInGDB("request_current_position", {});
+    if (!this.isTemporaryInterrupt) {
+      this.executePythonFunctionInGDB("request_current_position", {});
+    }
   }
 
   handleExitedEvent(args: HandleExitedEventArgs) {
@@ -310,6 +321,19 @@ class DebugSession {
       "just-gdb.gdbAcceptsInput",
       acceptsInput
     );
+  }
+
+  syncIOEcho(args: SyncIOEchoArgs) {
+    this.waitingSyncs.get(args.id)!();
+    this.waitingSyncs.delete(args.id);
+  }
+
+  async syncIO() {
+    return new Promise<void>((resolve) => {
+      const syncID = syncIOCounter++;
+      this.executePythonFunctionInGDB("sync_io", { id: syncID });
+      this.waitingSyncs.set(syncID, resolve);
+    });
   }
 
   currentPositionRequestFinished(args: CurrentPositionRequestFinishedArgs) {
@@ -452,11 +476,16 @@ export function activate(context: vscode.ExtensionContext) {
   // Start loading breakpoints. Also see https://github.com/microsoft/vscode/issues/130138.
   vscode.debug.breakpoints;
 
-  vscode.debug.onDidChangeBreakpoints((e) => {
+  vscode.debug.onDidChangeBreakpoints(async (e) => {
     if (globalDebugSession === null) {
       return;
     }
-    // Todo: Potentially interrupt the application to set breakpoints.
+    const wasAcceptingInput = globalDebugSession.gdbAcceptsInputs;
+    if (!wasAcceptingInput) {
+      globalDebugSession.isTemporaryInterrupt = true;
+      globalDebugSession.interrupt();
+      await globalDebugSession.syncIO();
+    }
     if (e.added.length > 0) {
       globalDebugSession.executePythonFunctionInGDB("set_breakpoints", {
         vscode_breakpoints: e.added,
@@ -466,6 +495,11 @@ export function activate(context: vscode.ExtensionContext) {
       globalDebugSession.executePythonFunctionInGDB("remove_breakpoints", {
         vscode_breakpoints: e.removed,
       });
+    }
+    if (!wasAcceptingInput) {
+      await globalDebugSession.syncIO();
+      globalDebugSession.isTemporaryInterrupt = false;
+      globalDebugSession.executeInternalCommandInGDB("continue");
     }
   });
 }

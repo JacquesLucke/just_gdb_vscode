@@ -181,3 +181,8 @@ def request_current_position():
         )
         return
     invoke_vscode_function("currentPositionRequestFailed")
+
+
+@vscode_callable
+def sync_io(id):
+    invoke_vscode_function("syncIOEcho", id=id)
