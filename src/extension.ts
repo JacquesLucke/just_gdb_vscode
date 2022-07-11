@@ -457,12 +457,16 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
     // Todo: Potentially interrupt the application to set breakpoints.
-    globalDebugSession.executePythonFunctionInGDB("set_breakpoints", {
-      vscode_breakpoints: e.added,
-    });
-    globalDebugSession.executePythonFunctionInGDB("remove_breakpoints", {
-      vscode_breakpoints: e.removed,
-    });
+    if (e.added.length > 0) {
+      globalDebugSession.executePythonFunctionInGDB("set_breakpoints", {
+        vscode_breakpoints: e.added,
+      });
+    }
+    if (e.removed.length > 0) {
+      globalDebugSession.executePythonFunctionInGDB("remove_breakpoints", {
+        vscode_breakpoints: e.removed,
+      });
+    }
   });
 }
 
